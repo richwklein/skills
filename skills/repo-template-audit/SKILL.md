@@ -16,14 +16,16 @@ Audits a target repo against a template repo on GitHub.
 ## Invocation
 
 ```
-/repo-template-audit [owner/repo]
+/repo-template-audit [--apply] [owner/repo]
 ```
 
 The template repo argument specifies which template to compare against (e.g., `richwklein/repo-template-base` or `richwklein/repo-template-astro`).
 
 If omitted, the script queries the GitHub API for the repo's `template_repository` metadata. When detected, the script prints `DETECTED_TEMPLATE=<owner/repo>` to stderr. **You MUST confirm the detected template with the user before presenting findings.** If no template is detected, prompt the user to provide one.
 
-When invoked:
+### Audit mode (default)
+
+When invoked without `--apply`:
 
 1. Resolve the target path. Default to the current working directory.
 2. Run the audit script:
@@ -36,6 +38,30 @@ When invoked:
 
 3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.
 4. Read the script's markdown output. Present the findings to the user, grouped by section.
+
+### Apply mode (`--apply`)
+
+When invoked with `--apply`:
+
+1. Resolve the target path. Default to the current working directory.
+2. Run the apply script:
+
+   ```bash
+   python3 <skill-dir>/lib/apply.py [owner/repo] [target-path]
+   ```
+
+3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.
+4. Read the script's markdown output. The script **automatically applies**:
+   - All settings drift (GitHub API calls)
+   - Missing `exact_match` files (fetched from template and written locally)
+   - Missing rulesets (copied from template)
+5. The script reports **drifted files** that it did NOT auto-apply. Present those diffs to the user and ask which (if any) to reset to the template version.
+6. If any files were synced locally, commit them:
+
+   ```bash
+   git add <changed-files>
+   git commit -m "chore(audit): sync files with template"
+   ```
 
 ## Interpreting output
 
