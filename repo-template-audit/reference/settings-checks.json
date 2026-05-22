@@ -1,0 +1,70 @@
+{
+  "$comment": "Defines which GitHub API endpoints and fields to compare between a template repo and a target repo. Contains NO expected values — the template repo's live settings ARE the canonical truth.",
+  "endpoints": [
+    {
+      "path": "repos/{repo}",
+      "section": "general",
+      "fields": [
+        "allow_merge_commit",
+        "allow_squash_merge",
+        "allow_rebase_merge",
+        "delete_branch_on_merge",
+        "allow_auto_merge",
+        "allow_update_branch",
+        "squash_merge_commit_title",
+        "squash_merge_commit_message",
+        "web_commit_signoff_required"
+      ],
+      "nested_fields": {
+        "security_and_analysis": [
+          "secret_scanning.status",
+          "secret_scanning_push_protection.status",
+          "dependabot_security_updates.status"
+        ]
+      }
+    },
+    {
+      "path": "repos/{repo}/actions/permissions",
+      "section": "actions",
+      "fields": [
+        "allowed_actions"
+      ]
+    },
+    {
+      "path": "repos/{repo}/actions/permissions/workflow",
+      "section": "actions",
+      "fields": [
+        "default_workflow_permissions",
+        "can_approve_pull_request_reviews"
+      ]
+    },
+    {
+      "path": "repos/{repo}/actions/permissions/selected-actions",
+      "section": "actions",
+      "fields": [
+        "github_owned_allowed",
+        "verified_allowed",
+        "patterns_allowed"
+      ]
+    },
+    {
+      "path": "repos/{repo}/private-vulnerability-reporting",
+      "section": "security",
+      "fields": [
+        "enabled"
+      ]
+    },
+    {
+      "path": "repos/{repo}/code-scanning/default-setup",
+      "section": "security",
+      "fields": [
+        "state"
+      ]
+    },
+    {
+      "path": "repos/{repo}/rulesets",
+      "section": "rulesets",
+      "compare": "rulesets"
+    }
+  ]
+}

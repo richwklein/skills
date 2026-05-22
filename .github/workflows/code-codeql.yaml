@@ -47,6 +47,8 @@ jobs:
         include:
           - language: actions
             runner: ubuntu-latest
+          - language: python
+            runner: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
