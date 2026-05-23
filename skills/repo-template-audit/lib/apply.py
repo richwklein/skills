@@ -73,14 +73,21 @@ def _build_nested(dotpath_vals: dict) -> dict:
 def apply_settings(template_repo: str, target_repo: str) -> list[str]:
     checks = load_settings_checks()
     lines: list[str] = []
+    errors: list[str] = []
 
     for endpoint in checks.get("endpoints", []):
         path_tmpl = endpoint["path"]
         if endpoint.get("compare") == "rulesets":
             continue
 
-        t_data = gh_api(path_tmpl.format(repo=template_repo)) or {}
-        a_data = gh_api(path_tmpl.format(repo=target_repo)) or {}
+        t_path = path_tmpl.format(repo=template_repo)
+        a_path = path_tmpl.format(repo=target_repo)
+        t_data = gh_api(t_path, errors=errors)
+        a_data = gh_api(a_path, errors=errors)
+
+        if not isinstance(t_data, dict) or not isinstance(a_data, dict):
+            lines.append(f"- ✗ `{path_tmpl}`: skipped (API read failed)")
+            continue
 
         fix_fields: dict = {}
         fix_nested: dict = {}
@@ -130,12 +137,23 @@ def apply_settings(template_repo: str, target_repo: str) -> list[str]:
         field_names = list(fix_fields.keys()) + list(fix_nested.keys())
         lines.append(f"- {'✓' if ok is not None else '✗'} `{path_tmpl}`: `{', '.join(field_names)}`")
 
+    for error in errors:
+        lines.append(f"- ✗ API read: {error}")
+
     return lines
 
 
 def apply_rulesets(template_repo: str, target_repo: str) -> list[str]:
-    t_rulesets = gh_api(f"repos/{template_repo}/rulesets") or []
-    a_rulesets = gh_api(f"repos/{target_repo}/rulesets") or []
+    errors: list[str] = []
+    t_rulesets = gh_api(f"repos/{template_repo}/rulesets", errors=errors)
+    a_rulesets = gh_api(f"repos/{target_repo}/rulesets", errors=errors)
+
+    if not isinstance(t_rulesets, list) or not isinstance(a_rulesets, list):
+        lines = ["- ✗ rulesets: skipped (API read failed)"]
+        for error in errors:
+            lines.append(f"- ✗ API read: {error}")
+        return lines
+
     a_names = {r.get("name") for r in a_rulesets if isinstance(r, dict)}
     lines: list[str] = []
 
@@ -143,10 +161,14 @@ def apply_rulesets(template_repo: str, target_repo: str) -> list[str]:
         if not isinstance(r, dict):
             continue
         name = r.get("name")
+        ruleset_id = r.get("id")
+        if not name or not ruleset_id:
+            lines.append("- ✗ ruleset: skipped malformed template summary")
+            continue
         if name in a_names:
             continue
-        full = gh_api(f"repos/{template_repo}/rulesets/{r['id']}")
-        if not full:
+        full = gh_api(f"repos/{template_repo}/rulesets/{ruleset_id}", errors=errors)
+        if not isinstance(full, dict):
             lines.append(f"- ✗ ruleset `{name}`: could not fetch from template")
             continue
         payload = {k: full[k] for k in ("name", "target", "enforcement", "conditions", "rules") if k in full}
@@ -155,16 +177,20 @@ def apply_rulesets(template_repo: str, target_repo: str) -> list[str]:
         ok = gh_write("POST", f"repos/{target_repo}/rulesets", payload)
         lines.append(f"- {'✓' if ok is not None else '✗'} ruleset `{name}`: created")
 
+    for error in errors:
+        lines.append(f"- ✗ API read: {error}")
+
     return lines
 
 
 # ---- Files ------------------------------------------------------------------
 
-def apply_files(target: Path, template_repo: str) -> tuple[list[str], list[tuple]]:
-    """Sync missing exact_match files. Return (applied_paths, drifted_list)."""
+def apply_files(target: Path, template_repo: str) -> tuple[list[str], list[tuple], list[str]]:
+    """Sync missing exact_match files. Return applied, drifted, and fetch errors."""
     tree = fetch_tree(template_repo)
     applied: list[str] = []
     drifted: list[tuple] = []
+    fetch_errors: list[str] = []
 
     for path in tree:
         if should_ignore(path) or path in PRESENCE_ONLY:
@@ -172,6 +198,7 @@ def apply_files(target: Path, template_repo: str) -> tuple[list[str], list[tuple
 
         canonical = fetch_file(template_repo, path)
         if canonical is None:
+            fetch_errors.append(path)
             continue
 
         local_path = target / path
@@ -182,7 +209,7 @@ def apply_files(target: Path, template_repo: str) -> tuple[list[str], list[tuple
         elif local_path.read_bytes() != canonical:
             drifted.append((path, diff_snippet(canonical, local_path.read_bytes(), path)))
 
-    return applied, drifted
+    return applied, drifted, fetch_errors
 
 
 # ---- Report -----------------------------------------------------------------
@@ -194,6 +221,7 @@ def print_report(
     ruleset_lines: list[str],
     applied_files: list[str],
     drifted_files: list[tuple],
+    fetch_errors: list[str] | None = None,
 ) -> None:
     print(f"# Apply report: `{target_repo}`")
     print()
@@ -219,6 +247,15 @@ def print_report(
             print(f"- `{p}`")
     else:
         print("_None._")
+
+    fetch_errors = fetch_errors or []
+    if fetch_errors:
+        print()
+        print(f"### Fetch errors ({len(fetch_errors)})")
+        print()
+        print("_Could not fetch these from the template repo:_")
+        for p in fetch_errors:
+            print(f"- `{p}`")
     print()
 
     print(f"### Needs review ({len(drifted_files)})")
@@ -250,7 +287,12 @@ def main() -> int:
         detected = detect_template(target_repo_id)
         if detected:
             print(f"DETECTED_TEMPLATE={detected}", file=sys.stderr)
-            template_repo = detected
+            print(
+                "error: detected template must be confirmed before apply mode mutates the repo. "
+                "Rerun with the template repo as the first argument.",
+                file=sys.stderr,
+            )
+            return 2
         else:
             print(
                 "error: no template argument provided and could not detect "
@@ -263,9 +305,9 @@ def main() -> int:
 
     settings_lines = apply_settings(template_repo, target_repo)
     ruleset_lines = apply_rulesets(template_repo, target_repo)
-    applied_files, drifted_files = apply_files(target, template_repo)
+    applied_files, drifted_files, fetch_errors = apply_files(target, template_repo)
 
-    print_report(target_repo, template_repo, settings_lines, ruleset_lines, applied_files, drifted_files)
+    print_report(target_repo, template_repo, settings_lines, ruleset_lines, applied_files, drifted_files, fetch_errors)
     return 0
 
 
