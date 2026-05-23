@@ -61,7 +61,7 @@ SCHEMA_CHECKS = [
 
 # ---- gh CLI helpers ----------------------------------------------------------
 
-def gh_api(path: str) -> dict | list | None:
+def gh_api(path: str, errors: list[str] | None = None) -> dict | list | None:
     """GET an API path via `gh api`. Returns parsed JSON, or None on error."""
     try:
         out = subprocess.run(
@@ -69,9 +69,14 @@ def gh_api(path: str) -> dict | list | None:
             check=True, capture_output=True, text=True,
         ).stdout
         return json.loads(out) if out.strip() else None
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        if errors is not None:
+            detail = e.stderr.strip() if e.stderr else f"exit status {e.returncode}"
+            errors.append(f"`{path}`: {detail}")
         return None
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        if errors is not None:
+            errors.append(f"`{path}`: could not parse JSON ({e})")
         return None
 
 
@@ -90,8 +95,16 @@ def fetch_file(repo: str, path: str) -> bytes | None:
 
 def detect_target(target: Path) -> str:
     """Return owner/repo for the target directory."""
-    if not (target / ".git").is_dir():
+    try:
+        inside = subprocess.run(
+            ["git", "-C", str(target), "rev-parse", "--is-inside-work-tree"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
         sys.exit(f"error: {target} is not a git repo")
+    if inside != "true":
+        sys.exit(f"error: {target} is not a git repo")
+
     try:
         remote = subprocess.run(
             ["git", "-C", str(target), "remote", "get-url", "origin"],
@@ -278,10 +291,17 @@ def fmt(v) -> str:
     return str(v)
 
 
-def compare_rulesets(template_repo: str, target_repo: str) -> list[str]:
+def compare_rulesets(
+    template_repo: str,
+    target_repo: str,
+    errors: list[str] | None = None,
+) -> list[str]:
     """Compare rulesets between template and target repos."""
-    t_rulesets = gh_api(f"repos/{template_repo}/rulesets") or []
-    a_rulesets = gh_api(f"repos/{target_repo}/rulesets") or []
+    t_rulesets = gh_api(f"repos/{template_repo}/rulesets", errors=errors)
+    a_rulesets = gh_api(f"repos/{target_repo}/rulesets", errors=errors)
+
+    if not isinstance(t_rulesets, list) or not isinstance(a_rulesets, list):
+        return ["| rulesets | unknown | unknown (API error) |"]
 
     t_names = {r.get("name") for r in t_rulesets if isinstance(r, dict)}
     a_names = {r.get("name") for r in a_rulesets if isinstance(r, dict)}
@@ -307,23 +327,29 @@ def audit_settings(template_repo: str, target_repo: str) -> list[str]:
     out: list[str] = ["## Settings drift", ""]
 
     sections: dict[str, list[str]] = {}
+    api_errors: list[str] = []
 
     for endpoint in checks.get("endpoints", []):
         path_template = endpoint["path"]
         section_name = endpoint.get("section", "general")
 
         if endpoint.get("compare") == "rulesets":
-            rows = compare_rulesets(template_repo, target_repo)
+            rows = compare_rulesets(template_repo, target_repo, errors=api_errors)
             sections.setdefault(section_name, []).extend(rows)
             continue
 
         t_path = path_template.format(repo=template_repo)
         a_path = path_template.format(repo=target_repo)
 
-        t_data = gh_api(t_path) or {}
-        a_data = gh_api(a_path) or {}
+        t_data = gh_api(t_path, errors=api_errors)
+        a_data = gh_api(a_path, errors=api_errors)
 
         rows = []
+
+        if not isinstance(t_data, dict) or not isinstance(a_data, dict):
+            rows.append(f"| endpoint `{path_template}` | unknown | unknown (API error) |")
+            sections.setdefault(section_name, []).extend(rows)
+            continue
 
         for field in endpoint.get("fields", []):
             t_val = t_data.get(field, "unknown")
@@ -360,6 +386,14 @@ def audit_settings(template_repo: str, target_repo: str) -> list[str]:
         out.extend(rows or ["| _no drift_ | | |"])
         out.append("")
 
+    if api_errors:
+        out.append("### API errors")
+        out.append("")
+        out.append("_Could not verify these settings endpoints:_")
+        for error in api_errors:
+            out.append(f"- {error}")
+        out.append("")
+
     return out
 
 
@@ -375,7 +409,11 @@ def detect_template(target_repo: str) -> str | None:
 
 def is_github_repo_arg(arg: str) -> bool:
     """True if arg looks like owner/repo (not a file path)."""
-    return "/" in arg and not arg.startswith(("/", ".", "~"))
+    if arg.startswith(("/", ".", "~")):
+        return False
+    if Path(arg).exists():
+        return False
+    return re.fullmatch(r"[^/\s]+/[^/\s]+", arg) is not None
 
 
 def main() -> int:
