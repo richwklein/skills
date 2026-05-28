@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""apply.py — audit and auto-fix template drift.
-
-Usage:
-    apply.py <template-owner/repo> [target-path]
-
-Auto-applies:  settings drift, missing exact_match files, missing rulesets.
-Reports only:  drifted files (drift may be intentional — requires human review).
-"""
+"""Auto-fix template drift by applying settings, files, and rulesets."""
 
 from __future__ import annotations
 
@@ -17,6 +10,7 @@ from pathlib import Path
 
 from .audit import (
     AuditError,
+    build_parser,
     diff_snippet,
     fetch_file,
     fetch_tree,
@@ -223,9 +217,15 @@ def apply_files(target: Path, template_repo: str) -> ApplyFilesResult:
 
 # ---- Main -------------------------------------------------------------------
 
+_APPLY_DESCRIPTION = (
+    "Auto-fix template drift by applying settings, syncing missing files, "
+    "and creating missing rulesets. Drifted files are reported for manual review."
+)
+
+
 def main() -> int:
     try:
-        args = parse_args(sys.argv)
+        args = parse_args(sys.argv, description=_APPLY_DESCRIPTION)
     except AuditError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

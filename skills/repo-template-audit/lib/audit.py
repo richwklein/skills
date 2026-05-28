@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
-"""repo-template-audit — drift detection against a GitHub template repo.
-
-Usage:
-    audit.py <template-owner/repo> [target-path]
-
-template-owner/repo: the GitHub repo to compare against (e.g. richwklein/repo-template-base).
-target-path:         local repo to audit (defaults to current working directory).
-
-Outputs a markdown report on stdout.
-"""
+"""Drift detection against a GitHub template repo."""
 
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import os
@@ -392,26 +384,64 @@ class ParsedArgs:
     detected: bool = False
 
 
-def parse_args(argv: list[str]) -> ParsedArgs:
+_DEFAULT_DESCRIPTION = (
+    "Compare a local repo against a GitHub template repo to detect "
+    "file drift, settings drift, and schema gaps."
+)
+
+
+def build_parser(
+    prog: str = "audit",
+    description: str = _DEFAULT_DESCRIPTION,
+) -> argparse.ArgumentParser:
+    """Build the shared argument parser for audit and apply scripts."""
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description=description,
+    )
+    parser.add_argument(
+        "template",
+        nargs="?",
+        default=None,
+        help=(
+            "Template repo in owner/repo format (e.g. richwklein/repo-template-base). "
+            "If omitted, auto-detected from the GitHub API."
+        ),
+    )
+    parser.add_argument(
+        "target_path",
+        nargs="?",
+        default=None,
+        help="Local repo path to audit (defaults to current working directory).",
+    )
+    return parser
+
+
+def parse_args(argv: list[str], description: str = _DEFAULT_DESCRIPTION) -> ParsedArgs:
     """Parse CLI arguments shared by audit and apply scripts."""
-    if len(argv) >= 2 and is_github_repo_arg(argv[1]):
-        template_repo = argv[1]
-        target = Path(argv[2] if len(argv) > 2 else os.getcwd()).resolve()
+    parser = build_parser(
+        prog=Path(argv[0]).stem if argv else "audit",
+        description=description,
+    )
+    raw = parser.parse_args(argv[1:])
+
+    if raw.template and is_github_repo_arg(raw.template):
+        template_repo = raw.template
+        target = Path(raw.target_path or os.getcwd()).resolve()
         detected = False
     else:
-        target = Path(argv[1] if len(argv) > 1 else os.getcwd()).resolve()
+        target = Path(raw.template or os.getcwd()).resolve()
         target_repo_id = detect_target(target)
         template = detect_template(target_repo_id)
-        if template:
-            print(f"DETECTED_TEMPLATE={template}", file=sys.stderr)
-            template_repo = template
-            detected = True
-        else:
+        if not template:
             raise AuditError(
                 "no template argument provided and could not detect "
                 "template_repository from GitHub API. Pass the template repo "
                 "as the first argument."
             )
+        print(f"DETECTED_TEMPLATE={template}", file=sys.stderr)
+        template_repo = template
+        detected = True
 
     target_repo = detect_target(target)
     return ParsedArgs(
