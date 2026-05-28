@@ -31,7 +31,7 @@ When invoked without `--apply`:
 2. Run the audit script:
 
    ```bash
-   python3 <skill-dir>/lib/audit.py [owner/repo] [target-path]
+   python3 <skill-dir>/audit [owner/repo] [target-path]
    ```
 
    `<skill-dir>` is the directory containing this SKILL.md file.
@@ -47,7 +47,7 @@ When invoked with `--apply`:
 2. Run the apply script:
 
    ```bash
-   python3 <skill-dir>/lib/apply.py [owner/repo] [target-path]
+   python3 <skill-dir>/apply [owner/repo] [target-path]
    ```
 
 3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.

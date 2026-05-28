@@ -1,25 +1,14 @@
 from __future__ import annotations
 
-try:
-    from .models import (
-        ApplyFilesResult,
-        ApplyRulesetsResult,
-        ApplySettingsResult,
-        FileDriftResult,
-        RulesetDrift,
-        SettingDrift,
-        SettingsDriftResult,
-    )
-except ImportError:
-    from models import (
-        ApplyFilesResult,
-        ApplyRulesetsResult,
-        ApplySettingsResult,
-        FileDriftResult,
-        RulesetDrift,
-        SettingDrift,
-        SettingsDriftResult,
-    )
+from .models import (
+    ApplyFilesResult,
+    ApplyRulesetsResult,
+    ApplySettingsResult,
+    FileDriftResult,
+    RulesetDrift,
+    SettingDrift,
+    SettingsDriftResult,
+)
 
 
 def format_value(v) -> str:

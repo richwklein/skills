@@ -22,24 +22,14 @@ from dataclasses import dataclass
 from difflib import unified_diff
 from pathlib import Path
 
-try:
-    from .models import (
-        FileDriftResult,
-        RulesetDrift,
-        SchemaGap,
-        SettingDrift,
-        SettingsDriftResult,
-    )
-    from .render import render_audit_report
-except ImportError:
-    from models import (
-        FileDriftResult,
-        RulesetDrift,
-        SchemaGap,
-        SettingDrift,
-        SettingsDriftResult,
-    )
-    from render import render_audit_report
+from .models import (
+    FileDriftResult,
+    RulesetDrift,
+    SchemaGap,
+    SettingDrift,
+    SettingsDriftResult,
+)
+from .render import render_audit_report
 
 
 class AuditError(Exception):
@@ -448,5 +438,3 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())

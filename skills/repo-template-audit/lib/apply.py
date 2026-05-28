@@ -15,48 +15,26 @@ import subprocess
 import sys
 from pathlib import Path
 
-try:
-    from .audit import (
-        AuditError,
-        diff_snippet,
-        fetch_file,
-        fetch_tree,
-        gh_api,
-        load_settings_checks,
-        parse_args,
-        PRESENCE_ONLY,
-        resolve_nested,
-        should_ignore,
-        values_match,
-    )
-    from .models import (
-        ApplyAction,
-        ApplyFilesResult,
-        ApplyRulesetsResult,
-        ApplySettingsResult,
-    )
-    from .render import render_apply_report
-except ImportError:
-    from audit import (
-        AuditError,
-        diff_snippet,
-        fetch_file,
-        fetch_tree,
-        gh_api,
-        load_settings_checks,
-        parse_args,
-        PRESENCE_ONLY,
-        resolve_nested,
-        should_ignore,
-        values_match,
-    )
-    from models import (
-        ApplyAction,
-        ApplyFilesResult,
-        ApplyRulesetsResult,
-        ApplySettingsResult,
-    )
-    from render import render_apply_report
+from .audit import (
+    AuditError,
+    diff_snippet,
+    fetch_file,
+    fetch_tree,
+    gh_api,
+    load_settings_checks,
+    parse_args,
+    PRESENCE_ONLY,
+    resolve_nested,
+    should_ignore,
+    values_match,
+)
+from .models import (
+    ApplyAction,
+    ApplyFilesResult,
+    ApplyRulesetsResult,
+    ApplySettingsResult,
+)
+from .render import render_apply_report
 
 
 # ---- GitHub write helper ----------------------------------------------------
@@ -270,5 +248,3 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
