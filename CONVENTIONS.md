@@ -4,13 +4,14 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ## Structure
 
-Every skill MUST have its own top-level directory containing a `SKILL.md` file.
+Every skill MUST live in its own directory under `skills/`, containing a `SKILL.md` file.
 
 ```
-skill-name/
-├── SKILL.md          # REQUIRED — skill metadata and instructions
-├── lib/              # OPTIONAL — implementation scripts
-└── reference/        # OPTIONAL — config files read at runtime
+skills/
+└── skill-name/
+    ├── SKILL.md          # REQUIRED — skill metadata and instructions
+    ├── lib/              # OPTIONAL — implementation scripts
+    └── reference/        # OPTIONAL — config files read at runtime
 ```
 
 ## SKILL.md

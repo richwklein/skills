@@ -17,6 +17,9 @@ pnpm-debug.log*
 # coverage
 coverage/
 
+# python
+__pycache__/
+
 # env files
 .env
 .env.*
