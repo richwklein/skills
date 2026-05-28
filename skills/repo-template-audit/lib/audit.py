@@ -18,45 +18,73 @@ import os
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from difflib import unified_diff
 from pathlib import Path
 
+try:
+    from .models import (
+        FileDriftResult,
+        RulesetDrift,
+        SchemaGap,
+        SettingDrift,
+        SettingsDriftResult,
+    )
+    from .render import render_audit_report
+except ImportError:
+    from models import (
+        FileDriftResult,
+        RulesetDrift,
+        SchemaGap,
+        SettingDrift,
+        SettingsDriftResult,
+    )
+    from render import render_audit_report
+
+
+class AuditError(Exception):
+    pass
+
 
 # ---- Classification config ---------------------------------------------------
-# Files to skip entirely during comparison.
-IGNORE = {
-    ".git",
-    "README.md",
-}
 
-# Prefixes to skip (any path starting with these is ignored).
-IGNORE_PREFIXES = (
-    ".git/",
-    ".claude/",
-    "src/",
-)
+@dataclass
+class FileConfig:
+    ignore: set[str]
+    ignore_prefixes: tuple[str, ...]
+    presence_only: set[str]
+    schema_checks: list[dict]
 
-# Files that must exist but whose content varies per repo.
-PRESENCE_ONLY = {
-    "CODE_OF_CONDUCT.md",
-    "package.json",
-    "package-lock.json",
-    "astro.config.ts",
-    "vitest.setup.ts",
-    "release-please-config.json",
-    ".release-please-manifest.json",
-}
+    @classmethod
+    def from_dict(cls, data: dict) -> FileConfig:
+        return cls(
+            ignore=set(data.get("ignore", [])),
+            ignore_prefixes=tuple(data.get("ignore_prefixes", [])),
+            presence_only=set(data.get("presence_only", [])),
+            schema_checks=data.get("schema_checks", []),
+        )
 
-# Schema validations applied when the file exists locally.
-SCHEMA_CHECKS = [
-    {
-        "path": "package.json",
-        "required_scripts": [
-            "dev", "build", "preview", "lint", "lint:fix",
-            "format", "format:fix", "test", "test:coverage", "verify",
-        ],
-    },
-]
+
+def load_file_checks() -> dict:
+    """Load file-checks.json from the reference directory."""
+    ref_path = Path(__file__).resolve().parent.parent / "reference" / "file-checks.json"
+    if not ref_path.is_file():
+        raise AuditError(f"file checks config not found at {ref_path}")
+    with open(ref_path) as f:
+        return json.load(f)
+
+
+_default_file_config: FileConfig | None = None
+
+
+def get_file_config() -> FileConfig:
+    global _default_file_config
+    if _default_file_config is None:
+        _default_file_config = FileConfig.from_dict(load_file_checks())
+    return _default_file_config
+
+
+PRESENCE_ONLY = get_file_config().presence_only
 
 
 # ---- gh CLI helpers ----------------------------------------------------------
@@ -101,9 +129,9 @@ def detect_target(target: Path) -> str:
             check=True, capture_output=True, text=True,
         ).stdout.strip()
     except subprocess.CalledProcessError:
-        sys.exit(f"error: {target} is not a git repo")
+        raise AuditError(f"{target} is not a git repo")
     if inside != "true":
-        sys.exit(f"error: {target} is not a git repo")
+        raise AuditError(f"{target} is not a git repo")
 
     try:
         remote = subprocess.run(
@@ -111,11 +139,11 @@ def detect_target(target: Path) -> str:
             check=True, capture_output=True, text=True,
         ).stdout.strip()
     except subprocess.CalledProcessError:
-        sys.exit(f"error: no origin remote configured in {target}")
+        raise AuditError(f"no origin remote configured in {target}")
 
     m = re.search(r"github\.com[^:/]*[:/]([^/]+/[^/]+?)(?:\.git)?$", remote)
     if not m:
-        sys.exit(f"error: could not parse owner/repo from remote: {remote}")
+        raise AuditError(f"could not parse owner/repo from remote: {remote}")
     return m.group(1)
 
 
@@ -125,7 +153,7 @@ def fetch_tree(repo: str) -> list[str]:
     """Fetch all file paths from a repo's default branch tree."""
     data = gh_api(f"repos/{repo}/git/trees/HEAD?recursive=1")
     if not data or "tree" not in data:
-        sys.exit(f"error: could not fetch file tree for {repo}")
+        raise AuditError(f"could not fetch file tree for {repo}")
     return [
         entry["path"]
         for entry in data["tree"]
@@ -133,11 +161,13 @@ def fetch_tree(repo: str) -> list[str]:
     ]
 
 
-def should_ignore(path: str) -> bool:
+def should_ignore(path: str, config: FileConfig | None = None) -> bool:
     """Return True if path should be skipped entirely."""
-    if path in IGNORE:
+    if config is None:
+        config = get_file_config()
+    if path in config.ignore:
         return True
-    for prefix in IGNORE_PREFIXES:
+    for prefix in config.ignore_prefixes:
         if path.startswith(prefix):
             return True
     return False
@@ -158,8 +188,10 @@ def diff_snippet(canonical: bytes, local: bytes, path: str) -> str:
     return "".join(list(diff)[:40])
 
 
-def audit_files(target: Path, template_repo: str) -> list[str]:
+def audit_files(target: Path, template_repo: str, config: FileConfig | None = None) -> FileDriftResult:
     """Walk the template tree and compare against the target."""
+    if config is None:
+        config = get_file_config()
     tree = fetch_tree(template_repo)
 
     missing = []
@@ -167,12 +199,12 @@ def audit_files(target: Path, template_repo: str) -> list[str]:
     fetch_errors = []
 
     for path in tree:
-        if should_ignore(path):
+        if should_ignore(path, config):
             continue
 
         local_path = target / path
 
-        if path in PRESENCE_ONLY:
+        if path in config.presence_only:
             if not local_path.is_file():
                 missing.append((path, "presence_only"))
             continue
@@ -192,64 +224,29 @@ def audit_files(target: Path, template_repo: str) -> list[str]:
 
         drifted.append((path, diff_snippet(canonical, local_bytes, path)))
 
-    # Schema checks
-    schema_gaps = check_schemas(target)
+    schema_gaps = check_schemas(target, config)
 
-    out: list[str] = ["## File drift", ""]
-
-    out.append(f"### Missing ({len(missing)})")
-    out.append("")
-    if not missing:
-        out.append("_None._")
-    else:
-        for p, kind in missing:
-            out.append(f"- `{p}` ({kind})")
-    out.append("")
-
-    out.append(f"### Drifted ({len(drifted)})")
-    out.append("")
-    if not drifted:
-        out.append("_None._")
-    else:
-        for path, snippet in drifted:
-            out.append(f"- `{path}`")
-            out.append("")
-            out.append("  ```diff")
-            for line in snippet.splitlines():
-                out.append(f"  {line}")
-            out.append("  ```")
-            out.append("")
-
-    out.append("### Schema gaps")
-    out.append("")
-    if not schema_gaps:
-        out.append("_None._")
-    else:
-        out.extend(schema_gaps)
-    out.append("")
-
-    if fetch_errors:
-        out.append("### Fetch errors")
-        out.append("")
-        out.append("_Could not fetch these from the template repo:_")
-        for p in fetch_errors:
-            out.append(f"- `{p}`")
-        out.append("")
-
-    return out
+    return FileDriftResult(
+        missing=missing,
+        drifted=drifted,
+        schema_gaps=schema_gaps,
+        fetch_errors=fetch_errors,
+    )
 
 
-def check_schemas(target: Path) -> list[str]:
+def check_schemas(target: Path, config: FileConfig | None = None) -> list[SchemaGap]:
     """Run schema validations against local files."""
-    out = []
-    for check in SCHEMA_CHECKS:
+    if config is None:
+        config = get_file_config()
+    gaps: list[SchemaGap] = []
+    for check in config.schema_checks:
         pkg = target / check["path"]
         if not pkg.is_file():
             continue
         try:
             data = json.loads(pkg.read_text())
         except json.JSONDecodeError as e:
-            out.append(f"- `{check['path']}`: parse error ({e})")
+            gaps.append(SchemaGap(path=check["path"], message=f"parse error ({e})"))
             continue
 
         required = check.get("required_scripts", [])
@@ -257,8 +254,11 @@ def check_schemas(target: Path) -> list[str]:
             scripts = data.get("scripts", {})
             missing = [s for s in required if s not in scripts]
             if missing:
-                out.append(f"- `{check['path']}`: missing scripts `{', '.join(missing)}`")
-    return out
+                gaps.append(SchemaGap(
+                    path=check["path"],
+                    message=f"missing scripts `{', '.join(missing)}`",
+                ))
+    return gaps
 
 
 # ---- Settings drift ----------------------------------------------------------
@@ -267,7 +267,7 @@ def load_settings_checks() -> dict:
     """Load the settings-checks.json from the reference directory."""
     ref_path = Path(__file__).resolve().parent.parent / "reference" / "settings-checks.json"
     if not ref_path.is_file():
-        sys.exit(f"error: settings checks not found at {ref_path}")
+        raise AuditError(f"settings checks not found at {ref_path}")
     with open(ref_path) as f:
         return json.load(f)
 
@@ -282,51 +282,44 @@ def resolve_nested(data: dict, dotpath: str):
     return data
 
 
-def fmt(v) -> str:
-    """Format a value for the drift table."""
-    if isinstance(v, list):
-        return ", ".join(sorted(str(i) for i in v)) if v else "[]"
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    return str(v)
+def values_match(template_val, target_val) -> bool:
+    """Compare two setting values, normalizing list order."""
+    if isinstance(template_val, list):
+        if not isinstance(target_val, list):
+            return False
+        return sorted(str(i) for i in template_val) == sorted(str(i) for i in target_val)
+    return template_val == target_val
 
 
 def compare_rulesets(
     template_repo: str,
     target_repo: str,
     errors: list[str] | None = None,
-) -> list[str]:
+) -> list[RulesetDrift]:
     """Compare rulesets between template and target repos."""
-    t_rulesets = gh_api(f"repos/{template_repo}/rulesets", errors=errors)
-    a_rulesets = gh_api(f"repos/{target_repo}/rulesets", errors=errors)
+    template_rulesets = gh_api(f"repos/{template_repo}/rulesets", errors=errors)
+    target_rulesets = gh_api(f"repos/{target_repo}/rulesets", errors=errors)
 
-    if not isinstance(t_rulesets, list) or not isinstance(a_rulesets, list):
-        return ["| rulesets | unknown | unknown (API error) |"]
+    if not isinstance(template_rulesets, list) or not isinstance(target_rulesets, list):
+        return [RulesetDrift(name="rulesets", status="api_error")]
 
-    t_names = {r.get("name") for r in t_rulesets if isinstance(r, dict)}
-    a_names = {r.get("name") for r in a_rulesets if isinstance(r, dict)}
+    template_names = {r.get("name") for r in template_rulesets if isinstance(r, dict)}
+    target_names = {r.get("name") for r in target_rulesets if isinstance(r, dict)}
 
-    out = []
-    missing = t_names - a_names
-    extra = a_names - t_names
+    drifts: list[RulesetDrift] = []
+    for name in sorted(template_names - target_names):
+        drifts.append(RulesetDrift(name=name, status="missing"))
+    for name in sorted(target_names - template_names):
+        drifts.append(RulesetDrift(name=name, status="extra"))
 
-    if not missing and not extra:
-        out.append("| _no drift_ | | |")
-    else:
-        for name in sorted(missing):
-            out.append(f"| ruleset `{name}` | present | **missing** |")
-        for name in sorted(extra):
-            out.append(f"| ruleset `{name}` | absent | present (extra) |")
-
-    return out
+    return drifts
 
 
-def audit_settings(template_repo: str, target_repo: str) -> list[str]:
+def audit_settings(template_repo: str, target_repo: str) -> SettingsDriftResult:
     """Compare GitHub settings between template and target repos."""
     checks = load_settings_checks()
-    out: list[str] = ["## Settings drift", ""]
 
-    sections: dict[str, list[str]] = {}
+    sections: dict[str, list[SettingDrift | RulesetDrift]] = {}
     api_errors: list[str] = []
 
     for endpoint in checks.get("endpoints", []):
@@ -334,67 +327,52 @@ def audit_settings(template_repo: str, target_repo: str) -> list[str]:
         section_name = endpoint.get("section", "general")
 
         if endpoint.get("compare") == "rulesets":
-            rows = compare_rulesets(template_repo, target_repo, errors=api_errors)
-            sections.setdefault(section_name, []).extend(rows)
+            drifts = compare_rulesets(template_repo, target_repo, errors=api_errors)
+            sections.setdefault(section_name, []).extend(drifts)
             continue
 
-        t_path = path_template.format(repo=template_repo)
-        a_path = path_template.format(repo=target_repo)
+        template_path = path_template.format(repo=template_repo)
+        target_path = path_template.format(repo=target_repo)
 
-        t_data = gh_api(t_path, errors=api_errors)
-        a_data = gh_api(a_path, errors=api_errors)
+        template_data = gh_api(template_path, errors=api_errors)
+        target_data = gh_api(target_path, errors=api_errors)
 
-        rows = []
+        items: list[SettingDrift | RulesetDrift] = []
 
-        if not isinstance(t_data, dict) or not isinstance(a_data, dict):
-            rows.append(f"| endpoint `{path_template}` | unknown | unknown (API error) |")
-            sections.setdefault(section_name, []).extend(rows)
+        if not isinstance(template_data, dict) or not isinstance(target_data, dict):
+            items.append(SettingDrift(
+                key=f"endpoint `{path_template}`",
+                template_value="unknown",
+                target_value="unknown (API error)",
+            ))
+            sections.setdefault(section_name, []).extend(items)
             continue
 
         for field in endpoint.get("fields", []):
-            t_val = t_data.get(field, "unknown")
-            a_val = a_data.get(field, "unknown")
-
-            if isinstance(t_val, list):
-                t_norm = sorted(str(i) for i in t_val)
-                a_norm = sorted(str(i) for i in a_val) if isinstance(a_val, list) else a_val
-                if t_norm == a_norm:
-                    continue
-            elif t_val == a_val:
+            template_val = template_data.get(field, "unknown")
+            target_val = target_data.get(field, "unknown")
+            if values_match(template_val, target_val):
                 continue
-
-            rows.append(f"| {field} | `{fmt(t_val)}` | `{fmt(a_val)}` |")
+            items.append(SettingDrift(key=field, template_value=template_val, target_value=target_val))
 
         for parent_key, dotpaths in endpoint.get("nested_fields", {}).items():
-            t_parent = t_data.get(parent_key, {}) or {}
-            a_parent = a_data.get(parent_key, {}) or {}
+            template_parent = template_data.get(parent_key, {}) or {}
+            target_parent = target_data.get(parent_key, {}) or {}
 
             for dotpath in dotpaths:
-                t_val = resolve_nested(t_parent, dotpath)
-                a_val = resolve_nested(a_parent, dotpath)
-                if t_val == a_val:
+                template_val = resolve_nested(template_parent, dotpath)
+                target_val = resolve_nested(target_parent, dotpath)
+                if template_val == target_val:
                     continue
-                rows.append(f"| {parent_key}.{dotpath} | `{fmt(t_val)}` | `{fmt(a_val)}` |")
+                items.append(SettingDrift(
+                    key=f"{parent_key}.{dotpath}",
+                    template_value=template_val,
+                    target_value=target_val,
+                ))
 
-        sections.setdefault(section_name, []).extend(rows)
+        sections.setdefault(section_name, []).extend(items)
 
-    for section_name, rows in sections.items():
-        out.append(f"### {section_name}")
-        out.append("")
-        out.append("| key | template | target |")
-        out.append("|---|---|---|")
-        out.extend(rows or ["| _no drift_ | | |"])
-        out.append("")
-
-    if api_errors:
-        out.append("### API errors")
-        out.append("")
-        out.append("_Could not verify these settings endpoints:_")
-        for error in api_errors:
-            out.append(f"- {error}")
-        out.append("")
-
-    return out
+    return SettingsDriftResult(sections=sections, api_errors=api_errors)
 
 
 # ---- Main -------------------------------------------------------------------
@@ -416,33 +394,57 @@ def is_github_repo_arg(arg: str) -> bool:
     return re.fullmatch(r"[^/\s]+/[^/\s]+", arg) is not None
 
 
-def main() -> int:
-    if len(sys.argv) >= 2 and is_github_repo_arg(sys.argv[1]):
-        template_repo = sys.argv[1]
-        target = Path(sys.argv[2] if len(sys.argv) > 2 else os.getcwd()).resolve()
+@dataclass
+class ParsedArgs:
+    template_repo: str
+    target: Path
+    target_repo: str
+    detected: bool = False
+
+
+def parse_args(argv: list[str]) -> ParsedArgs:
+    """Parse CLI arguments shared by audit and apply scripts."""
+    if len(argv) >= 2 and is_github_repo_arg(argv[1]):
+        template_repo = argv[1]
+        target = Path(argv[2] if len(argv) > 2 else os.getcwd()).resolve()
+        detected = False
     else:
-        target = Path(sys.argv[1] if len(sys.argv) > 1 else os.getcwd()).resolve()
+        target = Path(argv[1] if len(argv) > 1 else os.getcwd()).resolve()
         target_repo_id = detect_target(target)
-        detected = detect_template(target_repo_id)
-        if detected:
-            print(f"DETECTED_TEMPLATE={detected}", file=sys.stderr)
-            template_repo = detected
+        template = detect_template(target_repo_id)
+        if template:
+            print(f"DETECTED_TEMPLATE={template}", file=sys.stderr)
+            template_repo = template
+            detected = True
         else:
-            print("error: no template argument provided and could not detect "
-                  "template_repository from GitHub API. Pass the template repo "
-                  "as the first argument.", file=sys.stderr)
-            print("usage: audit.py <template-owner/repo> [target-path]", file=sys.stderr)
-            sys.exit(1)
+            raise AuditError(
+                "no template argument provided and could not detect "
+                "template_repository from GitHub API. Pass the template repo "
+                "as the first argument."
+            )
 
     target_repo = detect_target(target)
+    return ParsedArgs(
+        template_repo=template_repo,
+        target=target,
+        target_repo=target_repo,
+        detected=detected,
+    )
 
-    print(f"# Audit report: `{target_repo}`")
-    print()
-    print(f"_Template: `{template_repo}`_")
-    print(f"_Local path: `{target}`_")
-    print()
-    print("\n".join(audit_files(target, template_repo)))
-    print("\n".join(audit_settings(template_repo, target_repo)))
+
+def main() -> int:
+    try:
+        args = parse_args(sys.argv)
+    except AuditError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    file_drift = audit_files(args.target, args.template_repo)
+    settings_drift = audit_settings(args.template_repo, args.target_repo)
+    print(render_audit_report(
+        args.target_repo, args.template_repo, str(args.target),
+        file_drift, settings_drift,
+    ))
     return 0
 
 
