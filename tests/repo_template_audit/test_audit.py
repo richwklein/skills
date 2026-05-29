@@ -121,10 +121,11 @@ class TestDetectTarget:
         assert run.call_args_list[1].args[0][3:] == ["remote", "get-url", "origin"]
 
     def test_raises_when_not_a_git_repo(self, audit) -> None:
-        with mock.patch.object(
-            audit.subprocess, "run",
-            side_effect=subprocess.CalledProcessError(1, ["git"]),
-        ):
+        calls = [
+            subprocess.CalledProcessError(1, ["git"]),
+            subprocess.CompletedProcess(["git"], 0, stdout="false\n", stderr=""),
+        ]
+        with mock.patch.object(audit.subprocess, "run", side_effect=calls):
             with pytest.raises(audit.AuditError):
                 audit.detect_target(Path("/tmp/not-git"))
 
@@ -135,6 +136,15 @@ class TestDetectTarget:
         ):
             with pytest.raises(audit.AuditError):
                 audit.detect_target(Path("/tmp/not-worktree"))
+
+    def test_raises_with_helpful_message_for_bare_repo(self, audit) -> None:
+        calls = [
+            subprocess.CompletedProcess(["git"], 0, stdout="false\n", stderr=""),
+            subprocess.CompletedProcess(["git"], 0, stdout="true\n", stderr=""),
+        ]
+        with mock.patch.object(audit.subprocess, "run", side_effect=calls):
+            with pytest.raises(audit.AuditError, match="bare repo"):
+                audit.detect_target(Path("/tmp/bare-repo"))
 
     def test_raises_when_remote_url_not_github(self, audit) -> None:
         calls = [
