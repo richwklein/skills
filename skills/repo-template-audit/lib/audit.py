@@ -111,8 +111,16 @@ def detect_target(target: Path) -> str:
             check=True, capture_output=True, text=True,
         ).stdout.strip()
     except subprocess.CalledProcessError:
-        raise AuditError(f"{target} is not a git repo")
+        inside = "false"
     if inside != "true":
+        is_bare = subprocess.run(
+            ["git", "-C", str(target), "rev-parse", "--is-bare-repository"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        if is_bare == "true":
+            raise AuditError(
+                f"{target} is a bare repo — run from a worktree (e.g. cd main/ first)"
+            )
         raise AuditError(f"{target} is not a git repo")
 
     try:
