@@ -39,7 +39,9 @@ class TestAuditError:
 class TestGhApi:
     def test_collects_subprocess_errors(self, audit) -> None:
         error = subprocess.CalledProcessError(
-            1, ["gh", "api", "repos/owner/repo"], stderr="not found",
+            1,
+            ["gh", "api", "repos/owner/repo"],
+            stderr="not found",
         )
         errors: list[str] = []
 
@@ -50,20 +52,23 @@ class TestGhApi:
 
     def test_success_empty_and_json_decode_error(self, audit) -> None:
         with mock.patch.object(
-            audit.subprocess, "run",
+            audit.subprocess,
+            "run",
             return_value=subprocess.CompletedProcess(["gh"], 0, stdout='{"ok": true}', stderr=""),
         ):
             assert audit.gh_api("repos/owner/repo") == {"ok": True}
 
         with mock.patch.object(
-            audit.subprocess, "run",
+            audit.subprocess,
+            "run",
             return_value=subprocess.CompletedProcess(["gh"], 0, stdout="", stderr=""),
         ):
             assert audit.gh_api("repos/owner/repo") is None
 
         errors: list[str] = []
         with mock.patch.object(
-            audit.subprocess, "run",
+            audit.subprocess,
+            "run",
             return_value=subprocess.CompletedProcess(["gh"], 0, stdout="{bad", stderr=""),
         ):
             assert audit.gh_api("repos/owner/repo", errors=errors) is None
@@ -111,7 +116,9 @@ class TestDetectTarget:
         target = Path("/tmp/worktree")
         calls = [
             subprocess.CompletedProcess(["git"], 0, stdout="true\n", stderr=""),
-            subprocess.CompletedProcess(["git"], 0, stdout="git@github.com:owner/repo.git\n", stderr=""),
+            subprocess.CompletedProcess(
+                ["git"], 0, stdout="git@github.com:owner/repo.git\n", stderr=""
+            ),
         ]
 
         with mock.patch.object(audit.subprocess, "run", side_effect=calls) as run:
@@ -131,7 +138,8 @@ class TestDetectTarget:
 
     def test_raises_when_not_inside_worktree(self, audit) -> None:
         with mock.patch.object(
-            audit.subprocess, "run",
+            audit.subprocess,
+            "run",
             return_value=subprocess.CompletedProcess(["git"], 0, stdout="false\n", stderr=""),
         ):
             with pytest.raises(audit.AuditError):
@@ -149,7 +157,9 @@ class TestDetectTarget:
     def test_raises_when_remote_url_not_github(self, audit) -> None:
         calls = [
             subprocess.CompletedProcess(["git"], 0, stdout="true\n", stderr=""),
-            subprocess.CompletedProcess(["git"], 0, stdout="https://example.com/repo.git\n", stderr=""),
+            subprocess.CompletedProcess(
+                ["git"], 0, stdout="https://example.com/repo.git\n", stderr=""
+            ),
         ]
         with mock.patch.object(audit.subprocess, "run", side_effect=calls):
             with pytest.raises(audit.AuditError):
@@ -183,7 +193,8 @@ class TestIsGithubRepoArg:
 class TestDetectTemplate:
     def test_returns_full_name_when_present(self, audit) -> None:
         with mock.patch.object(
-            audit, "gh_api",
+            audit,
+            "gh_api",
             return_value={"template_repository": {"full_name": "template/repo"}},
         ):
             assert audit.detect_template("target/repo") == "template/repo"
@@ -288,8 +299,14 @@ class TestAuditFiles:
             (target / "package.json").write_text(json.dumps({"scripts": {"dev": "vite"}}))
 
             tree = [
-                "README.md", ".claude/settings.json", "CODE_OF_CONDUCT.md",
-                "missing.txt", "same.txt", "drift.txt", "unfetchable.txt", "package.json",
+                "README.md",
+                ".claude/settings.json",
+                "CODE_OF_CONDUCT.md",
+                "missing.txt",
+                "same.txt",
+                "drift.txt",
+                "unfetchable.txt",
+                "package.json",
             ]
             files = {"same.txt": b"same", "drift.txt": b"template", "unfetchable.txt": None}
 
@@ -368,7 +385,9 @@ class TestCompareRulesets:
             "repos/target/repo/rulesets": [{"name": "main"}, {"name": "extra"}],
         }
 
-        with mock.patch.object(audit, "gh_api", side_effect=lambda path, errors=None: responses[path]):
+        with mock.patch.object(
+            audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+        ):
             drifts = audit.compare_rulesets("template/repo", "target/repo")
 
         assert any(d.name == "release" and d.status == "missing" for d in drifts)
@@ -379,7 +398,9 @@ class TestCompareRulesets:
             "repos/template/repo/rulesets": [{"name": "main"}, {"name": "release"}],
             "repos/target/repo/rulesets": [{"name": "main"}, {"name": "release"}],
         }
-        with mock.patch.object(audit, "gh_api", side_effect=lambda path, errors=None: responses[path]):
+        with mock.patch.object(
+            audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+        ):
             assert audit.compare_rulesets("template/repo", "target/repo") == []
 
     def test_reports_api_errors(self, audit) -> None:
@@ -419,7 +440,9 @@ class TestAuditSettings:
 
         with (
             mock.patch.object(audit, "load_settings_checks", return_value=checks),
-            mock.patch.object(audit, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
         ):
             result = audit.audit_settings("template/repo", "target/repo")
 
@@ -462,7 +485,9 @@ class TestAuditSettings:
 
         with (
             mock.patch.object(audit, "load_settings_checks", return_value=checks),
-            mock.patch.object(audit, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
         ):
             result = audit.audit_settings("template/repo", "target/repo")
 
