@@ -30,6 +30,7 @@ class AuditError(Exception):
 
 # ---- Classification config ---------------------------------------------------
 
+
 @dataclass
 class FileConfig:
     ignore: set[str]
@@ -71,12 +72,15 @@ PRESENCE_ONLY = get_file_config().presence_only
 
 # ---- gh CLI helpers ----------------------------------------------------------
 
+
 def gh_api(path: str, errors: list[str] | None = None) -> dict | list | None:
     """GET an API path via `gh api`. Returns parsed JSON, or None on error."""
     try:
         out = subprocess.run(
             ["gh", "api", path],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout
         return json.loads(out) if out.strip() else None
     except subprocess.CalledProcessError as e:
@@ -103,30 +107,34 @@ def fetch_file(repo: str, path: str) -> bytes | None:
 
 # ---- Target detection --------------------------------------------------------
 
+
 def detect_target(target: Path) -> str:
     """Return owner/repo for the target directory."""
     try:
         inside = subprocess.run(
             ["git", "-C", str(target), "rev-parse", "--is-inside-work-tree"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
     except subprocess.CalledProcessError:
         inside = "false"
     if inside != "true":
         is_bare = subprocess.run(
             ["git", "-C", str(target), "rev-parse", "--is-bare-repository"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         if is_bare == "true":
-            raise AuditError(
-                f"{target} is a bare repo — run from a worktree (e.g. cd main/ first)"
-            )
+            raise AuditError(f"{target} is a bare repo — run from a worktree (e.g. cd main/ first)")
         raise AuditError(f"{target} is not a git repo")
 
     try:
         remote = subprocess.run(
             ["git", "-C", str(target), "remote", "get-url", "origin"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
     except subprocess.CalledProcessError:
         raise AuditError(f"no origin remote configured in {target}")
@@ -139,16 +147,13 @@ def detect_target(target: Path) -> str:
 
 # ---- File tree walk ----------------------------------------------------------
 
+
 def fetch_tree(repo: str) -> list[str]:
     """Fetch all file paths from a repo's default branch tree."""
     data = gh_api(f"repos/{repo}/git/trees/HEAD?recursive=1")
     if not data or "tree" not in data:
         raise AuditError(f"could not fetch file tree for {repo}")
-    return [
-        entry["path"]
-        for entry in data["tree"]
-        if entry["type"] == "blob"
-    ]
+    return [entry["path"] for entry in data["tree"] if entry["type"] == "blob"]
 
 
 def should_ignore(path: str, config: FileConfig | None = None) -> bool:
@@ -171,14 +176,18 @@ def diff_snippet(canonical: bytes, local: bytes, path: str) -> str:
     except Exception:
         return "(binary file; cannot diff)"
     diff = unified_diff(
-        c_lines, l_lines,
-        fromfile=f"template/{path}", tofile=f"local/{path}",
+        c_lines,
+        l_lines,
+        fromfile=f"template/{path}",
+        tofile=f"local/{path}",
         n=2,
     )
     return "".join(list(diff)[:40])
 
 
-def audit_files(target: Path, template_repo: str, config: FileConfig | None = None) -> FileDriftResult:
+def audit_files(
+    target: Path, template_repo: str, config: FileConfig | None = None
+) -> FileDriftResult:
     """Walk the template tree and compare against the target."""
     if config is None:
         config = get_file_config()
@@ -244,14 +253,17 @@ def check_schemas(target: Path, config: FileConfig | None = None) -> list[Schema
             scripts = data.get("scripts", {})
             missing = [s for s in required if s not in scripts]
             if missing:
-                gaps.append(SchemaGap(
-                    path=check["path"],
-                    message=f"missing scripts `{', '.join(missing)}`",
-                ))
+                gaps.append(
+                    SchemaGap(
+                        path=check["path"],
+                        message=f"missing scripts `{', '.join(missing)}`",
+                    )
+                )
     return gaps
 
 
 # ---- Settings drift ----------------------------------------------------------
+
 
 def load_settings_checks() -> dict:
     """Load the settings-checks.json from the reference directory."""
@@ -330,11 +342,13 @@ def audit_settings(template_repo: str, target_repo: str) -> SettingsDriftResult:
         items: list[SettingDrift | RulesetDrift] = []
 
         if not isinstance(template_data, dict) or not isinstance(target_data, dict):
-            items.append(SettingDrift(
-                key=f"endpoint `{path_template}`",
-                template_value="unknown",
-                target_value="unknown (API error)",
-            ))
+            items.append(
+                SettingDrift(
+                    key=f"endpoint `{path_template}`",
+                    template_value="unknown",
+                    target_value="unknown (API error)",
+                )
+            )
             sections.setdefault(section_name, []).extend(items)
             continue
 
@@ -343,7 +357,9 @@ def audit_settings(template_repo: str, target_repo: str) -> SettingsDriftResult:
             target_val = target_data.get(field, "unknown")
             if values_match(template_val, target_val):
                 continue
-            items.append(SettingDrift(key=field, template_value=template_val, target_value=target_val))
+            items.append(
+                SettingDrift(key=field, template_value=template_val, target_value=target_val)
+            )
 
         for parent_key, dotpaths in endpoint.get("nested_fields", {}).items():
             template_parent = template_data.get(parent_key, {}) or {}
@@ -354,11 +370,13 @@ def audit_settings(template_repo: str, target_repo: str) -> SettingsDriftResult:
                 target_val = resolve_nested(target_parent, dotpath)
                 if template_val == target_val:
                     continue
-                items.append(SettingDrift(
-                    key=f"{parent_key}.{dotpath}",
-                    template_value=template_val,
-                    target_value=target_val,
-                ))
+                items.append(
+                    SettingDrift(
+                        key=f"{parent_key}.{dotpath}",
+                        template_value=template_val,
+                        target_value=target_val,
+                    )
+                )
 
         sections.setdefault(section_name, []).extend(items)
 
@@ -366,6 +384,7 @@ def audit_settings(template_repo: str, target_repo: str) -> SettingsDriftResult:
 
 
 # ---- Main -------------------------------------------------------------------
+
 
 def detect_template(target_repo: str) -> str | None:
     """Try to detect the template repo from GitHub's template_repository field."""
@@ -469,10 +488,13 @@ def main() -> int:
 
     file_drift = audit_files(args.target, args.template_repo)
     settings_drift = audit_settings(args.template_repo, args.target_repo)
-    print(render_audit_report(
-        args.target_repo, args.template_repo, str(args.target),
-        file_drift, settings_drift,
-    ))
+    print(
+        render_audit_report(
+            args.target_repo,
+            args.template_repo,
+            str(args.target),
+            file_drift,
+            settings_drift,
+        )
+    )
     return 0
-
-

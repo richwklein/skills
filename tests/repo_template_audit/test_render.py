@@ -86,7 +86,11 @@ class TestRenderApplyReport:
             fetch_errors=["missing-content.txt"],
         )
         output = render.render_apply_report(
-            "target/repo", "template/repo", settings, rulesets, files,
+            "target/repo",
+            "template/repo",
+            settings,
+            rulesets,
+            files,
         )
         assert "### Fetch errors (1)" in output
         assert "`missing-content.txt`" in output
@@ -97,7 +101,11 @@ class TestRenderApplyReport:
         rulesets = models.ApplyRulesetsResult()
         files = models.ApplyFilesResult()
         output = render.render_apply_report(
-            "target/repo", "template/repo", settings, rulesets, files,
+            "target/repo",
+            "template/repo",
+            settings,
+            rulesets,
+            files,
         )
         assert "_No settings drift" in output
         assert "### Synced (0)" in output
@@ -114,7 +122,11 @@ class TestRenderApplyReport:
         )
         files = models.ApplyFilesResult()
         output = render.render_apply_report(
-            "target/repo", "template/repo", settings, rulesets, files,
+            "target/repo",
+            "template/repo",
+            settings,
+            rulesets,
+            files,
         )
         assert "- ✓ fixed field" in output
         assert "- ✗ ruleset failed" in output

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -12,19 +11,27 @@ from unittest import mock
 class TestGhWrite:
     def test_success_with_body(self, apply_mod) -> None:
         with mock.patch.object(
-            apply_mod.subprocess, "run",
+            apply_mod.subprocess,
+            "run",
             return_value=subprocess.CompletedProcess(["gh"], 0, stdout=b'{"ok": true}', stderr=b""),
         ) as run:
             assert apply_mod.gh_write("PATCH", "repos/target/repo", {"x": 1}) == {"ok": True}
 
         assert run.call_args.args[0] == [
-            "gh", "api", "--method", "PATCH", "repos/target/repo", "--input", "-",
+            "gh",
+            "api",
+            "--method",
+            "PATCH",
+            "repos/target/repo",
+            "--input",
+            "-",
         ]
         assert run.call_args.kwargs["input"] == b'{"x": 1}'
 
     def test_success_empty_body(self, apply_mod) -> None:
         with mock.patch.object(
-            apply_mod.subprocess, "run",
+            apply_mod.subprocess,
+            "run",
             return_value=subprocess.CompletedProcess(["gh"], 0, stdout=b"", stderr=b""),
         ):
             assert apply_mod.gh_write("DELETE", "repos/target/repo") == {}
@@ -44,18 +51,21 @@ class TestGhWrite:
 class TestBuildNested:
     def test_builds_dotpath_tree(self, apply_mod) -> None:
         assert apply_mod._build_nested({"a.b": 1, "a.c.d": 2, "e": 3}) == {
-            "a": {"b": 1, "c": {"d": 2}}, "e": 3,
+            "a": {"b": 1, "c": {"d": 2}},
+            "e": 3,
         }
 
 
 class TestApplySettings:
     def test_skips_when_reads_fail(self, apply_mod) -> None:
         checks = {
-            "endpoints": [{
-                "path": "repos/{repo}",
-                "fields": ["allow_squash_merge"],
-                "nested_fields": {"security_and_analysis": ["secret_scanning.status"]},
-            }],
+            "endpoints": [
+                {
+                    "path": "repos/{repo}",
+                    "fields": ["allow_squash_merge"],
+                    "nested_fields": {"security_and_analysis": ["secret_scanning.status"]},
+                }
+            ],
         }
 
         def failing_gh_api(path: str, errors: list[str] | None = None):
@@ -71,29 +81,39 @@ class TestApplySettings:
             result = apply_mod.apply_settings("template/repo", "target/repo")
 
         gh_write.assert_not_called()
-        assert any(not a.success and "skipped (API read failed)" in a.description for a in result.actions)
+        assert any(
+            not a.success and "skipped (API read failed)" in a.description for a in result.actions
+        )
         assert result.errors
 
     def test_skips_unknown_and_noop_values(self, apply_mod) -> None:
         checks = {
-            "endpoints": [{
-                "path": "repos/{repo}",
-                "fields": ["missing", "topics", "allow_squash_merge"],
-                "nested_fields": {"security_and_analysis": ["secret_scanning.status"]},
-            }],
+            "endpoints": [
+                {
+                    "path": "repos/{repo}",
+                    "fields": ["missing", "topics", "allow_squash_merge"],
+                    "nested_fields": {"security_and_analysis": ["secret_scanning.status"]},
+                }
+            ],
         }
         responses = {
             "repos/template/repo": {
-                "topics": ["a", "b"], "allow_squash_merge": True, "security_and_analysis": {},
+                "topics": ["a", "b"],
+                "allow_squash_merge": True,
+                "security_and_analysis": {},
             },
             "repos/target/repo": {
-                "topics": "not-a-list", "allow_squash_merge": True, "security_and_analysis": {},
+                "topics": "not-a-list",
+                "allow_squash_merge": True,
+                "security_and_analysis": {},
             },
         }
 
         with (
             mock.patch.object(apply_mod, "load_settings_checks", return_value=checks),
-            mock.patch.object(apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
             mock.patch.object(apply_mod, "gh_write", return_value={}) as gh_write,
         ):
             result = apply_mod.apply_settings("template/repo", "target/repo")
@@ -106,11 +126,13 @@ class TestApplySettings:
 
     def test_returns_empty_when_no_drift(self, apply_mod) -> None:
         checks = {
-            "endpoints": [{
-                "path": "repos/{repo}",
-                "fields": ["allow_squash_merge"],
-                "nested_fields": {"security_and_analysis": ["secret_scanning.status"]},
-            }],
+            "endpoints": [
+                {
+                    "path": "repos/{repo}",
+                    "fields": ["allow_squash_merge"],
+                    "nested_fields": {"security_and_analysis": ["secret_scanning.status"]},
+                }
+            ],
         }
         responses = {
             "repos/template/repo": {
@@ -125,7 +147,9 @@ class TestApplySettings:
 
         with (
             mock.patch.object(apply_mod, "load_settings_checks", return_value=checks),
-            mock.patch.object(apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
             mock.patch.object(apply_mod, "gh_write") as gh_write,
         ):
             result = apply_mod.apply_settings("template/repo", "target/repo")
@@ -148,11 +172,13 @@ class TestApplySettings:
         }
         responses = {
             "repos/template/repo": {
-                "allow_squash_merge": True, "topics": ["b", "a"],
+                "allow_squash_merge": True,
+                "topics": ["b", "a"],
                 "security_and_analysis": {"secret_scanning": {"status": "enabled"}},
             },
             "repos/target/repo": {
-                "allow_squash_merge": False, "topics": ["a", "b"],
+                "allow_squash_merge": False,
+                "topics": ["a", "b"],
                 "security_and_analysis": {"secret_scanning": {"status": "disabled"}},
             },
             "repos/template/repo/private-vulnerability-reporting": {"enabled": False},
@@ -161,15 +187,21 @@ class TestApplySettings:
 
         with (
             mock.patch.object(apply_mod, "load_settings_checks", return_value=checks),
-            mock.patch.object(apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
             mock.patch.object(apply_mod, "gh_write", return_value={}) as gh_write,
         ):
             result = apply_mod.apply_settings("template/repo", "target/repo")
 
-        gh_write.assert_any_call("PATCH", "repos/target/repo", {
-            "allow_squash_merge": True,
-            "security_and_analysis": {"secret_scanning": {"status": "enabled"}},
-        })
+        gh_write.assert_any_call(
+            "PATCH",
+            "repos/target/repo",
+            {
+                "allow_squash_merge": True,
+                "security_and_analysis": {"secret_scanning": {"status": "enabled"}},
+            },
+        )
         gh_write.assert_any_call("DELETE", "repos/target/repo/private-vulnerability-reporting")
         descriptions = [a.description for a in result.actions]
         assert any("allow_squash_merge" in d and "security_and_analysis" in d for d in descriptions)
@@ -189,7 +221,9 @@ class TestApplyRulesets:
             result = apply_mod.apply_rulesets("template/repo", "target/repo")
 
         gh_write.assert_not_called()
-        assert any(not a.success and "skipped (API read failed)" in a.description for a in result.actions)
+        assert any(
+            not a.success and "skipped (API read failed)" in a.description for a in result.actions
+        )
         assert result.errors
 
     def test_reports_malformed_and_fetch_failures(self, apply_mod) -> None:
@@ -200,7 +234,9 @@ class TestApplyRulesets:
         }
 
         with (
-            mock.patch.object(apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
             mock.patch.object(apply_mod, "gh_write") as gh_write,
         ):
             result = apply_mod.apply_rulesets("template/repo", "target/repo")
@@ -215,23 +251,36 @@ class TestApplyRulesets:
             "repos/template/repo/rulesets": [{"name": "main", "id": 1}],
             "repos/target/repo/rulesets": [],
             "repos/template/repo/rulesets/1": {
-                "name": "main", "target": "branch", "enforcement": "active",
+                "name": "main",
+                "target": "branch",
+                "enforcement": "active",
                 "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
-                "rules": [{"type": "deletion"}], "bypass_actors": [], "ignored": True,
+                "rules": [{"type": "deletion"}],
+                "bypass_actors": [],
+                "ignored": True,
             },
         }
 
         with (
-            mock.patch.object(apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
             mock.patch.object(apply_mod, "gh_write", return_value={}) as gh_write,
         ):
             result = apply_mod.apply_rulesets("template/repo", "target/repo")
 
-        gh_write.assert_called_once_with("POST", "repos/target/repo/rulesets", {
-            "name": "main", "target": "branch", "enforcement": "active",
-            "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
-            "rules": [{"type": "deletion"}], "bypass_actors": [],
-        })
+        gh_write.assert_called_once_with(
+            "POST",
+            "repos/target/repo/rulesets",
+            {
+                "name": "main",
+                "target": "branch",
+                "enforcement": "active",
+                "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+                "rules": [{"type": "deletion"}],
+                "bypass_actors": [],
+            },
+        )
         assert len(result.actions) == 1
         assert result.actions[0].success
         assert "ruleset `main`: created" in result.actions[0].description
@@ -243,7 +292,9 @@ class TestApplyRulesets:
         }
 
         with (
-            mock.patch.object(apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]),
+            mock.patch.object(
+                apply_mod, "gh_api", side_effect=lambda path, errors=None: responses[path]
+            ),
             mock.patch.object(apply_mod, "gh_write") as gh_write,
         ):
             result = apply_mod.apply_rulesets("template/repo", "target/repo")
@@ -265,10 +316,19 @@ class TestApplyFiles:
 
             with (
                 mock.patch.object(
-                    apply_mod, "fetch_tree",
-                    return_value=["README.md", "package.json", "new/nested.txt", "drift.txt", "missing-content.txt"],
+                    apply_mod,
+                    "fetch_tree",
+                    return_value=[
+                        "README.md",
+                        "package.json",
+                        "new/nested.txt",
+                        "drift.txt",
+                        "missing-content.txt",
+                    ],
                 ),
-                mock.patch.object(apply_mod, "fetch_file", side_effect=lambda _repo, path: files[path]),
+                mock.patch.object(
+                    apply_mod, "fetch_file", side_effect=lambda _repo, path: files[path]
+                ),
             ):
                 result = apply_mod.apply_files(target, "template/repo")
 
@@ -282,8 +342,10 @@ class TestApplyMain:
     def test_auto_detected_template_exits_before_mutation(self, audit, apply_mod) -> None:
         stderr = io.StringIO()
         args = audit.ParsedArgs(
-            template_repo="template/repo", target=Path("/tmp"),
-            target_repo="target/repo", detected=True,
+            template_repo="template/repo",
+            target=Path("/tmp"),
+            target_repo="target/repo",
+            detected=True,
         )
 
         with (
@@ -312,8 +374,10 @@ class TestApplyMain:
     def test_explicit_template_runs_apply_steps(self, audit, apply_mod) -> None:
         stdout = io.StringIO()
         args = audit.ParsedArgs(
-            template_repo="template/repo", target=Path("/tmp"),
-            target_repo="target/repo", detected=False,
+            template_repo="template/repo",
+            target=Path("/tmp"),
+            target_repo="target/repo",
+            detected=False,
         )
         settings = apply_mod.ApplySettingsResult(
             actions=[apply_mod.ApplyAction(True, "settings fixed")],
@@ -322,7 +386,8 @@ class TestApplyMain:
             actions=[apply_mod.ApplyAction(True, "ruleset created")],
         )
         files = apply_mod.ApplyFilesResult(
-            synced=["new.txt"], fetch_errors=["fetch.txt"],
+            synced=["new.txt"],
+            fetch_errors=["fetch.txt"],
         )
 
         with (
