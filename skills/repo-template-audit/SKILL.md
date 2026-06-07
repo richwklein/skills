@@ -68,9 +68,41 @@ When invoked with `--apply`:
 The script emits these finding types:
 
 - **Missing files**: present in the template but absent locally. Almost always real drift.
-- **Drifted files**: present locally but differ from the template. Inspect each diff before proposing a fix — some drift is intentional.
+- **Drifted files**: present locally but differ from the template. Inspect each diff individually — do NOT batch-dismiss them as intentional.
 - **Schema gaps**: required fields or scripts missing (e.g., package.json scripts).
 - **Settings drift**: GitHub repo settings differ between the template and the target. Shown as a table with field, template value, and target value.
+
+### Per-file drift classification
+
+For every drifted file, classify it before presenting. Apply these heuristics in order:
+
+1. **CHANGELOG.md** — always skip. It's project-specific release history. Mention it once in passing, never flag it as drift.
+
+2. **Workflow / CI files** (`.github/workflows/*.yaml`, `.github/actions/**`) — always flag, even if the diff is additions-only. These files control security-sensitive pipelines (scanning, permissions, release). Present the diff and ask the user to explicitly confirm the change is intentional.
+
+3. **Deletion-containing diffs** — a diff that removes lines present in the template (`-` lines on the template side) must be flagged individually. The template author included that content for a reason; ask the user to confirm each removal was deliberate.
+
+4. **Additions-only diffs** in non-sensitive files — the diff adds lines locally but preserves all template lines. These are likely intentional extensions (e.g., adding a language-specific section to `.gitignore`, adding an IDE extension). Group these together and ask for a single confirmation rather than flagging each one.
+
+5. **Cosmetic-only diffs** (e.g., quote style `'` vs `"`, trailing whitespace) — note them as low-risk cosmetic differences, do not require explicit confirmation.
+
+### Interaction model for drifted files
+
+After classifying, present findings in two groups:
+
+**Flagged (requires explicit confirmation):**
+- Each CI/workflow file (additive or not)
+- Each file with deletions from the template
+
+For each flagged file, show the diff and ask: _"Was this change intentional?"_ Wait for the user's answer before moving on.
+
+**Informational (group confirmation):**
+- Additions-only diffs in non-sensitive files
+- Cosmetic-only diffs
+
+List these together and ask once: _"These look like expected project-specific additions — do any of them need a closer look?"_
+
+**Never** make a blanket statement that all diffs are intentional without applying these heuristics first.
 
 ## Remediating
 
