@@ -25,6 +25,10 @@ jobs:
         if: steps.changes.outputs.relevant != 'true'
         run: echo "::notice::No relevant changes detected; skipping tests."
 
+      - name: 'Install dependencies'
+        if: steps.changes.outputs.relevant == 'true'
+        run: pip install ".[dev]"
+
       - name: 'Run tests'
         if: steps.changes.outputs.relevant == 'true'
         run: python3 -m pytest tests/

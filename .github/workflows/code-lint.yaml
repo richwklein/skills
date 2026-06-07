@@ -25,9 +25,9 @@ jobs:
         if: steps.changes.outputs.relevant != 'true'
         run: echo "::notice::No relevant changes detected; skipping lint."
 
-      - name: 'Install ruff'
+      - name: 'Install dependencies'
         if: steps.changes.outputs.relevant == 'true'
-        run: pip install ruff
+        run: pip install ".[dev]"
 
       - name: 'Check formatting'
         if: always() && steps.changes.outputs.relevant == 'true'
