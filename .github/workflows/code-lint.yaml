@@ -1,4 +1,4 @@
-name: 'Format and Lint'
+name: "Format and Lint"
 on:
   pull_request:
 
@@ -10,29 +10,21 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: 'Checkout source code'
+      - name: "Checkout source code"
         uses: actions/checkout@v6.0.3
 
-      - name: 'Detect relevant changes'
+      - name: "Detect relevant changes"
         id: changes
         uses: ./.github/actions/detect-relevant-changes
-        with:
-          patterns: |
-            ^(skills|tests)/
-            ^pyproject\.toml$
 
-      - name: 'No relevant changes — noop'
-        if: steps.changes.outputs.relevant != 'true'
-        run: echo "::notice::No relevant changes detected; skipping lint."
-
-      - name: 'Install dependencies'
+      - name: "Install dependencies"
         if: steps.changes.outputs.relevant == 'true'
         run: pip install ".[dev]"
 
-      - name: 'Check formatting'
+      - name: "Check formatting"
         if: always() && steps.changes.outputs.relevant == 'true'
         run: ruff format --check .
 
-      - name: 'Check lint'
+      - name: "Check lint"
         if: always() && steps.changes.outputs.relevant == 'true'
         run: ruff check .
