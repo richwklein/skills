@@ -9,15 +9,14 @@ import sys
 from pathlib import Path
 
 from .audit import (
+    PRESENCE_ONLY,
     AuditError,
-    build_parser,
     diff_snippet,
     fetch_file,
     fetch_tree,
     gh_api,
     load_settings_checks,
     parse_args,
-    PRESENCE_ONLY,
     resolve_nested,
     should_ignore,
     values_match,
@@ -30,8 +29,8 @@ from .models import (
 )
 from .render import render_apply_report
 
-
 # ---- GitHub write helper ----------------------------------------------------
+
 
 def gh_write(method: str, path: str, body: dict | None = None) -> dict | None:
     cmd = ["gh", "api", "--method", method, path]
@@ -85,10 +84,12 @@ def apply_settings(template_repo: str, target_repo: str) -> ApplySettingsResult:
         target_data = gh_api(target_path, errors=errors)
 
         if not isinstance(template_data, dict) or not isinstance(target_data, dict):
-            actions.append(ApplyAction(
-                success=False,
-                description=f"`{path_tmpl}`: skipped (API read failed)",
-            ))
+            actions.append(
+                ApplyAction(
+                    success=False,
+                    description=f"`{path_tmpl}`: skipped (API read failed)",
+                )
+            )
             continue
 
         fix_fields: dict = {}
@@ -119,10 +120,12 @@ def apply_settings(template_repo: str, target_repo: str) -> ApplySettingsResult:
             method = "PUT" if enabled else "DELETE"
             ok = gh_write(method, target_path)
             action_desc = "enabled" if enabled else "disabled"
-            actions.append(ApplyAction(
-                success=ok is not None,
-                description=f"private vulnerability reporting → {action_desc}",
-            ))
+            actions.append(
+                ApplyAction(
+                    success=ok is not None,
+                    description=f"private vulnerability reporting → {action_desc}",
+                )
+            )
             continue
 
         body = dict(fix_fields)
@@ -132,10 +135,12 @@ def apply_settings(template_repo: str, target_repo: str) -> ApplySettingsResult:
         method = _FIX_METHOD.get(path_tmpl, "PATCH")
         ok = gh_write(method, target_path, body)
         field_names = list(fix_fields.keys()) + list(fix_nested.keys())
-        actions.append(ApplyAction(
-            success=ok is not None,
-            description=f"`{path_tmpl}`: `{', '.join(field_names)}`",
-        ))
+        actions.append(
+            ApplyAction(
+                success=ok is not None,
+                description=f"`{path_tmpl}`: `{', '.join(field_names)}`",
+            )
+        )
 
     return ApplySettingsResult(actions=actions, errors=errors)
 
@@ -160,33 +165,44 @@ def apply_rulesets(template_repo: str, target_repo: str) -> ApplyRulesetsResult:
         name = r.get("name")
         ruleset_id = r.get("id")
         if not name or not ruleset_id:
-            actions.append(ApplyAction(
-                success=False,
-                description="ruleset: skipped malformed template summary",
-            ))
+            actions.append(
+                ApplyAction(
+                    success=False,
+                    description="ruleset: skipped malformed template summary",
+                )
+            )
             continue
         if name in target_names:
             continue
         full = gh_api(f"repos/{template_repo}/rulesets/{ruleset_id}", errors=errors)
         if not isinstance(full, dict):
-            actions.append(ApplyAction(
-                success=False,
-                description=f"ruleset `{name}`: could not fetch from template",
-            ))
+            actions.append(
+                ApplyAction(
+                    success=False,
+                    description=f"ruleset `{name}`: could not fetch from template",
+                )
+            )
             continue
-        payload = {k: full[k] for k in ("name", "target", "enforcement", "conditions", "rules") if k in full}
+        payload = {
+            k: full[k]
+            for k in ("name", "target", "enforcement", "conditions", "rules")
+            if k in full
+        }
         if "bypass_actors" in full:
             payload["bypass_actors"] = full["bypass_actors"]
         ok = gh_write("POST", f"repos/{target_repo}/rulesets", payload)
-        actions.append(ApplyAction(
-            success=ok is not None,
-            description=f"ruleset `{name}`: created",
-        ))
+        actions.append(
+            ApplyAction(
+                success=ok is not None,
+                description=f"ruleset `{name}`: created",
+            )
+        )
 
     return ApplyRulesetsResult(actions=actions, errors=errors)
 
 
 # ---- Files ------------------------------------------------------------------
+
 
 def apply_files(target: Path, template_repo: str) -> ApplyFilesResult:
     """Sync missing exact_match files. Return structured result."""
@@ -242,9 +258,13 @@ def main() -> int:
     rulesets = apply_rulesets(args.template_repo, args.target_repo)
     files = apply_files(args.target, args.template_repo)
 
-    print(render_apply_report(
-        args.target_repo, args.template_repo, settings, rulesets, files,
-    ))
+    print(
+        render_apply_report(
+            args.target_repo,
+            args.template_repo,
+            settings,
+            rulesets,
+            files,
+        )
+    )
     return 0
-
-
