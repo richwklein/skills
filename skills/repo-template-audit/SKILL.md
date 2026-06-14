@@ -37,7 +37,7 @@ When invoked without `--apply`:
    `<skill-dir>` is the directory containing this SKILL.md file.
 
 3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.
-4. Read the script's markdown output. Present the findings to the user, grouped by section.
+4. Read the script's markdown output. **Do not present all findings at once.** Walk the user through the report one section at a time, following the [section-by-section flow](#section-by-section-flow) below. Wait for the user to respond before moving to the next section.
 
 ### Apply mode (`--apply`)
 
@@ -78,31 +78,47 @@ For every drifted file, classify it before presenting. Apply these heuristics in
 
 1. **CHANGELOG.md** — always skip. It's project-specific release history. Mention it once in passing, never flag it as drift.
 
-2. **Workflow / CI files** (`.github/workflows/*.yaml`, `.github/actions/**`) — always flag, even if the diff is additions-only. These files control security-sensitive pipelines (scanning, permissions, release). Present the diff and ask the user to explicitly confirm the change is intentional.
+2. **Workflow / CI files** (`.github/workflows/*.yaml`, `.github/actions/**`) — always classify as **Flagged**, even if the diff is additions-only. These files control security-sensitive pipelines (scanning, permissions, release).
 
-3. **Deletion-containing diffs** — a diff that removes lines present in the template (`-` lines on the template side) must be flagged individually. The template author included that content for a reason; ask the user to confirm each removal was deliberate.
+3. **Deletion-containing diffs** — classify as **Flagged**. The template author included the removed content for a reason; the user must confirm each removal was deliberate.
 
-4. **Additions-only diffs** in non-sensitive files — the diff adds lines locally but preserves all template lines. These are likely intentional extensions (e.g., adding a language-specific section to `.gitignore`, adding an IDE extension). Group these together and ask for a single confirmation rather than flagging each one.
+4. **Additions-only diffs** in non-sensitive files — classify as **Informational**. These are likely intentional extensions (e.g., adding a language-specific section to `.gitignore`, adding an IDE extension).
 
-5. **Cosmetic-only diffs** (e.g., quote style `'` vs `"`, trailing whitespace) — note them as low-risk cosmetic differences, do not require explicit confirmation.
+5. **Cosmetic-only diffs** (e.g., quote style `'` vs `"`, trailing whitespace) — classify as **Informational** and note as low-risk.
 
-### Interaction model for drifted files
+### Section-by-section flow
 
-After classifying, present findings in two groups:
+The wall-of-text approach (dumping every section and every question in one response) is the failure mode this skill exists to prevent. Walk the user through the report **one section at a time**. Within a section, you MAY batch all items together and ask a single set of questions — but you MUST stop and wait for the user's response before presenting the next section.
 
-**Flagged (requires explicit confirmation):**
-- Each CI/workflow file (additive or not)
-- Each file with deletions from the template
+Present sections in this order, skipping any that are empty. **The user needs enough context to decide without leaving the conversation** — show actual content (file contents, diffs, setting values), not summaries of content.
 
-For each flagged file, show the diff and ask: _"Was this change intentional?"_ Wait for the user's answer before moving on.
+1. **Missing files** — for each path, give:
+   - the path,
+   - a one-line note on what the template uses it for,
+   - a snippet (first ~20 lines, or the whole file if shorter) so the user can see what would land if they pull it in.
 
-**Informational (group confirmation):**
-- Additions-only diffs in non-sensitive files
-- Cosmetic-only diffs
+   Then ask: _"Should we pull these in from the template, or are any intentionally omitted?"_ **Stop. Wait.**
 
-List these together and ask once: _"These look like expected project-specific additions — do any of them need a closer look?"_
+2. **Drifted files — Flagged group** — for each file, show in this order:
+   - the path as a heading,
+   - a one-line summary of what changed (e.g., _"removes the template's PATH FILTERS comment block; bumps `actions/github-script` v7 → v8"_),
+   - **the actual unified diff in a fenced code block**, not a paraphrase. If the diff is genuinely huge (>80 lines), show the most decision-relevant hunks and say what was elided — never replace the diff with prose.
 
-**Never** make a blanket statement that all diffs are intentional without applying these heuristics first.
+   After all files, ask one numbered question per file tied to the specific change (e.g., _"1. `release-please.yaml` — was removing the `No paths filter` guidance comment intentional?"_). **Stop. Wait.**
+
+3. **Drifted files — Informational group** — for each file, give path + a one-line summary of what it adds (a diff isn't required here since these are additions-only and low-risk). If the user asks to see one, show the diff before moving on. Ask once: _"These look like expected project-specific additions — do any of them need a closer look?"_ **Stop. Wait.**
+
+4. **Schema gaps** (if any) — for each gap, show the path, the missing field/script, and the template's value for it. Ask whether to address them. **Stop. Wait.**
+
+5. **Settings drift** — present the table with field, template value, target value. For any row whose meaning isn't obvious from the field name (e.g., `default_workflow_permissions`, `allowed_actions`), add a one-line note on what that setting controls. Ask which rows to bring into alignment. **Stop. Wait.**
+
+Rules:
+
+- Never preview a later section while presenting an earlier one ("…and then we'll look at settings drift" is fine; showing the settings table early is not).
+- Never combine the confirmation prompts for two sections into one response.
+- If a section is empty, say so in one line and move on without a prompt.
+- **Never** make a blanket statement that all diffs are intentional without applying the classification heuristics first.
+- **Never** replace a diff or file snippet with a prose summary when asking the user to make a judgment call on it. Prose can accompany the diff; it cannot stand in for it.
 
 ## Remediating
 
