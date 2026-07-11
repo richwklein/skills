@@ -42,3 +42,11 @@ When a skill classifies findings by severity or action, it SHOULD use these term
 - **Missing** — an expected artifact is absent.
 - **Drifted** — an artifact exists but differs from the reference.
 - **Gap** — a structural or schema requirement is unmet.
+
+## Preview and confirm
+
+Skills that write files MUST show the user a semantic preview before writing anything.
+
+- The preview MUST be a summary of the intended action — a table or structured list of "parameter → value" or "file → action" pairs. It MUST NOT contain raw file markup (Markdown, MDX, HTML, YAML, JSON) as if those files had already been written.
+- The skill MUST pause after presenting the preview and wait for explicit user confirmation before performing any write.
+- If the user declines or requests changes, the skill MUST incorporate the updated intent and re-present the preview before proceeding.
