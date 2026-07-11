@@ -44,19 +44,37 @@ When invoked without `--apply`:
 When invoked with `--apply`:
 
 1. Resolve the target path. Default to the current working directory.
-2. Run the apply script:
+2. Run the **audit** script first to determine what will be changed:
+
+   ```bash
+   python3 <skill-dir>/audit [owner/repo] [target-path]
+   ```
+
+3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.
+4. **Show a preview and wait for confirmation.** From the audit output, summarize what the apply script will auto-apply in a table — never raw file content:
+
+   | Action | Items |
+   |---|---|
+   | Settings to update | _list of drifted field names_ |
+   | Missing files to pull in | _list of paths_ |
+   | Missing rulesets to copy | _list of names_ |
+
+   Note that **drifted files** are not auto-applied and will be presented separately after apply runs.
+
+   **Stop. Wait for explicit confirmation before running the apply script.** If the user declines or requests changes, incorporate their feedback and re-present the preview before proceeding.
+
+5. Run the apply script:
 
    ```bash
    python3 <skill-dir>/apply [owner/repo] [target-path]
    ```
 
-3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.
-4. Read the script's markdown output. The script **automatically applies**:
+6. Read the script's markdown output. The script **automatically applies**:
    - All settings drift (GitHub API calls)
    - Missing `exact_match` files (fetched from template and written locally)
    - Missing rulesets (copied from template)
-5. The script reports **drifted files** that it did NOT auto-apply. Present those diffs to the user and ask which (if any) to reset to the template version.
-6. If any files were synced locally, commit them:
+7. The script reports **drifted files** that it did NOT auto-apply. Present those diffs to the user and ask which (if any) to reset to the template version.
+8. If any files were synced locally, commit them:
 
    ```bash
    git add <changed-files>
