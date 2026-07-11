@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.0](https://github.com/richwklein/skills/compare/v1.0.1...v1.1.0) (2026-07-11)
+
+
+### Features
+
+* **github:** adopt template PR labeler workflow and PR templates ([#22](https://github.com/richwklein/skills/issues/22)) ([9506449](https://github.com/richwklein/skills/commit/9506449bc1b5d757a41c21151d7232fd376cb68b))
+* **prepare-image:** add skill with preview-and-confirm convention ([#25](https://github.com/richwklein/skills/issues/25)) ([2abc768](https://github.com/richwklein/skills/commit/2abc7683e3bc29e46ebe10cb54b0c3fd2f825894))
+* **repo-template-audit:** require section-by-section walkthrough with explicit pauses ([#21](https://github.com/richwklein/skills/issues/21)) ([81c7cc3](https://github.com/richwklein/skills/commit/81c7cc3676bcb7543fc061a68ecd50eb617159a3))
+
+
+### Bug Fixes
+
+* **repo-template-audit:** add per-file drift classification heuristics ([#17](https://github.com/richwklein/skills/issues/17)) ([e24a595](https://github.com/richwklein/skills/commit/e24a595ba97924a09486da64b2b0d219e3168123))
+
 ## [1.0.1](https://github.com/richwklein/skills/compare/v1.0.0...v1.0.1) (2026-05-29)
 
 
