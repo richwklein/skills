@@ -31,10 +31,10 @@ When invoked without `--apply`:
 2. Run the audit script:
 
    ```bash
-   python3 <skill-dir>/audit [owner/repo] [target-path]
+   repo-template-audit [owner/repo] [target-path]
    ```
 
-   `<skill-dir>` is the directory containing this SKILL.md file.
+   If `repo-template-audit` is not on PATH, fall back to `python3 <skill-dir>/audit`, where `<skill-dir>` is the directory containing this SKILL.md file.
 
 3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.
 4. Read the script's markdown output. **Do not present all findings at once.** Walk the user through the report one section at a time, following the [section-by-section flow](#section-by-section-flow) below. Wait for the user to respond before moving to the next section.
@@ -47,7 +47,7 @@ When invoked with `--apply`:
 2. Run the **audit** script first to determine what will be changed:
 
    ```bash
-   python3 <skill-dir>/audit [owner/repo] [target-path]
+   repo-template-audit [owner/repo] [target-path]
    ```
 
 3. If stderr contains `DETECTED_TEMPLATE=`, ask the user to confirm that template before continuing.
@@ -66,8 +66,10 @@ When invoked with `--apply`:
 5. Run the apply script:
 
    ```bash
-   python3 <skill-dir>/apply [owner/repo] [target-path]
+   repo-template-audit-apply [owner/repo] [target-path]
    ```
+
+   If `repo-template-audit-apply` is not on PATH, fall back to `python3 <skill-dir>/apply`.
 
 6. Read the script's markdown output. The script **automatically applies**:
    - All settings drift (GitHub API calls)
