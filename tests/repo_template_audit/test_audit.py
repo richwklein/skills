@@ -82,6 +82,12 @@ class TestFetchFile:
         with mock.patch.object(audit, "gh_api", return_value={"content": encoded}):
             assert audit.fetch_file("owner/repo", "file.txt") == b"hello"
 
+    def test_passes_ref(self, audit) -> None:
+        encoded = base64.b64encode(b"hello").decode()
+        with mock.patch.object(audit, "gh_api", return_value={"content": encoded}) as api:
+            assert audit.fetch_file("owner/repo", "file.txt", ref="abc123") == b"hello"
+        api.assert_called_once_with("repos/owner/repo/contents/file.txt?ref=abc123")
+
     def test_rejects_missing_content(self, audit) -> None:
         with mock.patch.object(audit, "gh_api", return_value={}):
             assert audit.fetch_file("owner/repo", "file.txt") is None
@@ -271,12 +277,12 @@ class TestFileHelpers:
         assert audit.should_ignore(".claude/settings.json")
         assert not audit.should_ignore("SECURITY.md")
 
-    def test_diff_snippet(self, audit) -> None:
-        diff = audit.diff_snippet(b"old\n", b"new\n", "file.txt")
-        assert "--- template/file.txt" in diff
-        assert "+++ local/file.txt" in diff
-        assert "-old" in diff
-        assert "+new" in diff
+    def test_diff_snippet_reads_local_to_template(self, audit) -> None:
+        diff = audit.diff_snippet(b"template\n", b"local\n", "file.txt")
+        assert "--- local/file.txt" in diff
+        assert "+++ template/file.txt" in diff
+        assert "-local" in diff
+        assert "+template" in diff
 
     def test_diff_snippet_binary(self, audit) -> None:
         assert audit.diff_snippet(object(), b"new\n", "file.txt") == "(binary file; cannot diff)"
@@ -284,6 +290,77 @@ class TestFileHelpers:
     def test_resolve_nested(self, audit) -> None:
         assert audit.resolve_nested({"a": {"b": 1}}, "a.b") == 1
         assert audit.resolve_nested({"a": None}, "a.b") == "unknown"
+
+
+class TestMissingFileProvenance:
+    def test_reports_local_deletion_commit(self, audit) -> None:
+        with mock.patch.object(
+            audit.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                ["git"], 0, stdout="abc1234 remove file\n", stderr=""
+            ),
+        ) as run:
+            provenance = audit.missing_file_provenance(Path("/tmp/repo"), "file.txt")
+
+        assert provenance == ("deleted_locally", "abc1234 remove file")
+        args = run.call_args.args[0]
+        assert "--diff-filter=D" in args
+        assert args[-1] == "file.txt"
+
+    def test_new_in_template_when_never_deleted(self, audit) -> None:
+        with mock.patch.object(
+            audit.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(["git"], 0, stdout="\n", stderr=""),
+        ):
+            assert audit.missing_file_provenance(Path("/tmp/repo"), "file.txt") == (
+                "new_in_template",
+                None,
+            )
+
+    def test_new_in_template_when_git_fails(self, audit) -> None:
+        with mock.patch.object(
+            audit.subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(128, ["git"]),
+        ):
+            assert audit.missing_file_provenance(Path("/tmp/repo"), "file.txt") == (
+                "new_in_template",
+                None,
+            )
+
+
+class TestBehindTemplateRef:
+    def test_returns_matching_older_commit(self, audit) -> None:
+        commits = [{"sha": "headsha000000"}, {"sha": "abc1234def567"}]
+        with (
+            mock.patch.object(audit, "gh_api", return_value=commits),
+            mock.patch.object(audit, "fetch_file", return_value=b"local") as fetch,
+        ):
+            assert audit.behind_template_ref("t/repo", "file.txt", b"local") == "abc1234"
+        fetch.assert_called_once_with("t/repo", "file.txt", ref="abc1234def567")
+
+    def test_returns_none_when_no_blob_matches(self, audit) -> None:
+        commits = [{"sha": "headsha000000"}, {"sha": "oldsha1234567"}]
+        with (
+            mock.patch.object(audit, "gh_api", return_value=commits),
+            mock.patch.object(audit, "fetch_file", return_value=b"other"),
+        ):
+            assert audit.behind_template_ref("t/repo", "file.txt", b"local") is None
+
+    def test_returns_none_on_api_error(self, audit) -> None:
+        with mock.patch.object(audit, "gh_api", return_value=None):
+            assert audit.behind_template_ref("t/repo", "file.txt", b"local") is None
+
+    def test_skips_head_and_malformed_entries(self, audit) -> None:
+        commits = [{"sha": "headsha000000"}, "bad", {}, {"sha": "match12345678"}]
+        with (
+            mock.patch.object(audit, "gh_api", return_value=commits),
+            mock.patch.object(audit, "fetch_file", return_value=b"local") as fetch,
+        ):
+            assert audit.behind_template_ref("t/repo", "file.txt", b"local") == "match12"
+        fetch.assert_called_once_with("t/repo", "file.txt", ref="match12345678")
 
 
 # ---- File drift --------------------------------------------------------------
@@ -295,6 +372,7 @@ class TestAuditFiles:
             target = Path(tmp)
             (target / "same.txt").write_bytes(b"same")
             (target / "drift.txt").write_bytes(b"local")
+            (target / "behind.txt").write_bytes(b"old template")
             (target / "unfetchable.txt").write_bytes(b"local")
             (target / "package.json").write_text(json.dumps({"scripts": {"dev": "vite"}}))
 
@@ -305,22 +383,45 @@ class TestAuditFiles:
                 "missing.txt",
                 "same.txt",
                 "drift.txt",
+                "behind.txt",
                 "unfetchable.txt",
                 "package.json",
             ]
-            files = {"same.txt": b"same", "drift.txt": b"template", "unfetchable.txt": None}
+            files = {
+                "same.txt": b"same",
+                "drift.txt": b"template",
+                "behind.txt": b"new template",
+                "unfetchable.txt": None,
+            }
+
+            def fake_provenance(_target, path):
+                if path == "missing.txt":
+                    return ("deleted_locally", "abc1234 remove missing.txt")
+                return ("new_in_template", None)
+
+            def fake_behind(_repo, path, _local):
+                return "def5678" if path == "behind.txt" else None
 
             with (
                 mock.patch.object(audit, "fetch_tree", return_value=tree),
                 mock.patch.object(audit, "fetch_file", side_effect=lambda _repo, path: files[path]),
+                mock.patch.object(audit, "missing_file_provenance", side_effect=fake_provenance),
+                mock.patch.object(audit, "behind_template_ref", side_effect=fake_behind),
             ):
                 result = audit.audit_files(target, "template/repo")
 
-        assert len(result.missing) == 2
-        assert ("CODE_OF_CONDUCT.md", "presence_only") in result.missing
-        assert ("missing.txt", "exact_match") in result.missing
-        assert len(result.drifted) == 1
-        assert result.drifted[0][0] == "drift.txt"
+        missing = {m.path: m for m in result.missing}
+        assert len(missing) == 2
+        assert missing["CODE_OF_CONDUCT.md"].kind == "presence_only"
+        assert missing["CODE_OF_CONDUCT.md"].provenance == "new_in_template"
+        assert missing["CODE_OF_CONDUCT.md"].evidence is None
+        assert missing["missing.txt"].kind == "exact_match"
+        assert missing["missing.txt"].provenance == "deleted_locally"
+        assert missing["missing.txt"].evidence == "abc1234 remove missing.txt"
+        drifted = {d.path: d for d in result.drifted}
+        assert len(drifted) == 2
+        assert drifted["drift.txt"].behind_ref is None
+        assert drifted["behind.txt"].behind_ref == "def5678"
         assert len(result.schema_gaps) == 1
         assert result.schema_gaps[0].path == "package.json"
         assert "missing scripts" in result.schema_gaps[0].message

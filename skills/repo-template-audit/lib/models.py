@@ -11,9 +11,24 @@ class SchemaGap:
 
 
 @dataclass
+class MissingFile:
+    path: str
+    kind: str  # exact_match | presence_only
+    provenance: str = "new_in_template"  # new_in_template | deleted_locally
+    evidence: str | None = None  # deleting commit ("<short-sha> <subject>")
+
+
+@dataclass
+class DriftedFile:
+    path: str
+    diff: str
+    behind_ref: str | None = None  # template commit whose blob matches local content
+
+
+@dataclass
 class FileDriftResult:
-    missing: list[tuple[str, str]] = field(default_factory=list)
-    drifted: list[tuple[str, str]] = field(default_factory=list)
+    missing: list[MissingFile] = field(default_factory=list)
+    drifted: list[DriftedFile] = field(default_factory=list)
     schema_gaps: list[SchemaGap] = field(default_factory=list)
     fetch_errors: list[str] = field(default_factory=list)
 
@@ -58,5 +73,6 @@ class ApplyRulesetsResult:
 @dataclass
 class ApplyFilesResult:
     synced: list[str] = field(default_factory=list)
-    drifted: list[tuple[str, str]] = field(default_factory=list)
+    drifted: list[DriftedFile] = field(default_factory=list)
+    skipped_deleted: list[MissingFile] = field(default_factory=list)
     fetch_errors: list[str] = field(default_factory=list)
