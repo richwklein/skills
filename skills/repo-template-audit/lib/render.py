@@ -4,10 +4,17 @@ from .models import (
     ApplyFilesResult,
     ApplyRulesetsResult,
     ApplySettingsResult,
+    DriftedFile,
     FileDriftResult,
+    MissingFile,
     RulesetDrift,
     SettingDrift,
     SettingsDriftResult,
+)
+
+DIFF_DIRECTION_NOTE = (
+    "_Diffs read local → template: `+` lines are template content a sync would add; "
+    "`-` lines are local content a sync would remove._"
 )
 
 
@@ -19,16 +26,50 @@ def format_value(v) -> str:
     return str(v)
 
 
+def _missing_line(m: MissingFile) -> str:
+    if m.provenance == "deleted_locally":
+        return f"- `{m.path}` ({m.kind}) — deleted locally in `{m.evidence}`"
+    return f"- `{m.path}` ({m.kind})"
+
+
+def _drifted_heading(f: DriftedFile) -> str:
+    if f.behind_ref:
+        return (
+            f"- `{f.path}` — **behind template** "
+            f"(local matches template@{f.behind_ref}; fast-forward sync is safe)"
+        )
+    return f"- `{f.path}`"
+
+
+def _diff_block(snippet: str) -> list[str]:
+    out = ["", "  ```diff"]
+    for line in snippet.splitlines():
+        out.append(f"  {line}")
+    out.append("  ```")
+    out.append("")
+    return out
+
+
 def render_file_drift(result: FileDriftResult) -> list[str]:
     out: list[str] = ["## File drift", ""]
 
     out.append(f"### Missing ({len(result.missing)})")
     out.append("")
+    new_in_template = [m for m in result.missing if m.provenance == "new_in_template"]
+    deleted_locally = [m for m in result.missing if m.provenance == "deleted_locally"]
     if not result.missing:
         out.append("_None._")
-    else:
-        for p, kind in result.missing:
-            out.append(f"- `{p}` ({kind})")
+    if new_in_template:
+        out.append("**New in template** — never existed in this repo; adopt by default:")
+        out.append("")
+        for m in new_in_template:
+            out.append(_missing_line(m))
+        out.append("")
+    if deleted_locally:
+        out.append("**Deleted locally** — a local commit removed these; confirm before restoring:")
+        out.append("")
+        for m in deleted_locally:
+            out.append(_missing_line(m))
     out.append("")
 
     out.append(f"### Drifted ({len(result.drifted)})")
@@ -36,14 +77,11 @@ def render_file_drift(result: FileDriftResult) -> list[str]:
     if not result.drifted:
         out.append("_None._")
     else:
-        for path, snippet in result.drifted:
-            out.append(f"- `{path}`")
-            out.append("")
-            out.append("  ```diff")
-            for line in snippet.splitlines():
-                out.append(f"  {line}")
-            out.append("  ```")
-            out.append("")
+        out.append(DIFF_DIRECTION_NOTE)
+        out.append("")
+        for f in result.drifted:
+            out.append(_drifted_heading(f))
+            out.extend(_diff_block(f.diff))
 
     out.append("### Schema gaps")
     out.append("")
@@ -169,6 +207,17 @@ def render_apply_report(
     else:
         lines.append("_None._")
 
+    if files.skipped_deleted:
+        lines.append("")
+        lines.append(f"### Skipped — deleted locally ({len(files.skipped_deleted)})")
+        lines.append("")
+        lines.append(
+            "_A local commit removed these template files; "
+            "not restored automatically — confirm each removal still stands:_"
+        )
+        for m in files.skipped_deleted:
+            lines.append(_missing_line(m))
+
     if files.fetch_errors:
         lines.append("")
         lines.append(f"### Fetch errors ({len(files.fetch_errors)})")
@@ -181,19 +230,12 @@ def render_apply_report(
     lines.append(f"### Needs review ({len(files.drifted)})")
     lines.append("")
     if files.drifted:
-        lines.append(
-            "_These files differ from the template. "
-            "Drift may be intentional — review before resetting._"
-        )
+        lines.append("_These files differ from the template — review each before resetting._")
+        lines.append(DIFF_DIRECTION_NOTE)
         lines.append("")
-        for path, snippet in files.drifted:
-            lines.append(f"- `{path}`")
-            lines.append("")
-            lines.append("  ```diff")
-            for line in snippet.splitlines():
-                lines.append(f"  {line}")
-            lines.append("  ```")
-            lines.append("")
+        for f in files.drifted:
+            lines.append(_drifted_heading(f))
+            lines.extend(_diff_block(f.diff))
     else:
         lines.append("_None._")
 

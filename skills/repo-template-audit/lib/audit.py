@@ -13,9 +13,12 @@ import sys
 from dataclasses import dataclass
 from difflib import unified_diff
 from pathlib import Path
+from urllib.parse import quote
 
 from .models import (
+    DriftedFile,
     FileDriftResult,
+    MissingFile,
     RulesetDrift,
     SchemaGap,
     SettingDrift,
@@ -94,9 +97,12 @@ def gh_api(path: str, errors: list[str] | None = None) -> dict | list | None:
         return None
 
 
-def fetch_file(repo: str, path: str) -> bytes | None:
+def fetch_file(repo: str, path: str, ref: str | None = None) -> bytes | None:
     """Fetch a file's raw bytes from a GitHub repo via the contents API."""
-    data = gh_api(f"repos/{repo}/contents/{path}")
+    api_path = f"repos/{repo}/contents/{path}"
+    if ref:
+        api_path += f"?ref={ref}"
+    data = gh_api(api_path)
     if not data or "content" not in data:
         return None
     try:
@@ -169,20 +175,74 @@ def should_ignore(path: str, config: FileConfig | None = None) -> bool:
 
 
 def diff_snippet(canonical: bytes, local: bytes, path: str) -> str:
-    """Return a unified diff snippet (up to 40 lines)."""
+    """Return a unified diff snippet (up to 40 lines), local → template.
+
+    Reads as the patch a sync would apply: `+` lines are template content the
+    local copy lacks; `-` lines are local content a sync would remove.
+    """
     try:
         c_lines = canonical.decode("utf-8", errors="replace").splitlines(keepends=True)
         l_lines = local.decode("utf-8", errors="replace").splitlines(keepends=True)
     except Exception:
         return "(binary file; cannot diff)"
     diff = unified_diff(
-        c_lines,
         l_lines,
-        fromfile=f"template/{path}",
-        tofile=f"local/{path}",
+        c_lines,
+        fromfile=f"local/{path}",
+        tofile=f"template/{path}",
         n=2,
     )
     return "".join(list(diff)[:40])
+
+
+def missing_file_provenance(target: Path, path: str) -> tuple[str, str | None]:
+    """Classify a template file absent locally: deleted here, or new in the template.
+
+    Returns ("deleted_locally", "<short-sha> <subject>") when the target's git
+    history contains a commit deleting the path, else ("new_in_template", None).
+    """
+    try:
+        out = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(target),
+                "log",
+                "--diff-filter=D",
+                "--format=%h %s",
+                "-1",
+                "--",
+                path,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        return ("new_in_template", None)
+    if out:
+        return ("deleted_locally", out)
+    return ("new_in_template", None)
+
+
+def behind_template_ref(template_repo: str, path: str, local: bytes, limit: int = 20) -> str | None:
+    """Return the short sha of a template commit whose version of path matches local.
+
+    A match means the local file is an unmodified older template version — the
+    template simply moved forward, and syncing is a safe fast-forward.
+    """
+    commits = gh_api(f"repos/{template_repo}/commits?path={quote(path)}&per_page={limit}")
+    if not isinstance(commits, list):
+        return None
+    # Skip the newest commit: its blob is the current template content, which
+    # already differs from local or the file would not be drifted.
+    for commit in commits[1:]:
+        sha = commit.get("sha") if isinstance(commit, dict) else None
+        if not sha:
+            continue
+        if fetch_file(template_repo, path, ref=sha) == local:
+            return sha[:7]
+    return None
 
 
 def audit_files(
@@ -202,14 +262,16 @@ def audit_files(
             continue
 
         local_path = target / path
-
-        if path in config.presence_only:
-            if not local_path.is_file():
-                missing.append((path, "presence_only"))
-            continue
+        kind = "presence_only" if path in config.presence_only else "exact_match"
 
         if not local_path.is_file():
-            missing.append((path, "exact_match"))
+            provenance, evidence = missing_file_provenance(target, path)
+            missing.append(
+                MissingFile(path=path, kind=kind, provenance=provenance, evidence=evidence)
+            )
+            continue
+
+        if kind == "presence_only":
             continue
 
         canonical = fetch_file(template_repo, path)
@@ -221,7 +283,13 @@ def audit_files(
         if canonical == local_bytes:
             continue
 
-        drifted.append((path, diff_snippet(canonical, local_bytes, path)))
+        drifted.append(
+            DriftedFile(
+                path=path,
+                diff=diff_snippet(canonical, local_bytes, path),
+                behind_ref=behind_template_ref(template_repo, path, local_bytes),
+            )
+        )
 
     schema_gaps = check_schemas(target, config)
 

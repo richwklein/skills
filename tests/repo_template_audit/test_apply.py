@@ -314,6 +314,11 @@ class TestApplyFiles:
                 "missing-content.txt": None,
             }
 
+            def fake_provenance(_target, path):
+                if path == "removed.txt":
+                    return ("deleted_locally", "abc1234 remove removed.txt")
+                return ("new_in_template", None)
+
             with (
                 mock.patch.object(
                     apply_mod,
@@ -324,18 +329,45 @@ class TestApplyFiles:
                         "new/nested.txt",
                         "drift.txt",
                         "missing-content.txt",
+                        "removed.txt",
                     ],
                 ),
                 mock.patch.object(
                     apply_mod, "fetch_file", side_effect=lambda _repo, path: files[path]
                 ),
+                mock.patch.object(
+                    apply_mod, "missing_file_provenance", side_effect=fake_provenance
+                ),
+                mock.patch.object(apply_mod, "behind_template_ref", return_value=None),
             ):
                 result = apply_mod.apply_files(target, "template/repo")
 
             assert result.synced == ["new/nested.txt"]
             assert (target / "new" / "nested.txt").read_bytes() == b"template"
-            assert result.drifted[0][0] == "drift.txt"
+            assert result.drifted[0].path == "drift.txt"
+            assert result.drifted[0].behind_ref is None
+            assert len(result.skipped_deleted) == 1
+            assert result.skipped_deleted[0].path == "removed.txt"
+            assert result.skipped_deleted[0].evidence == "abc1234 remove removed.txt"
+            assert not (target / "removed.txt").exists()
             assert result.fetch_errors == ["missing-content.txt"]
+
+    def test_marks_behind_template_drift(self, apply_mod) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            (target / "drift.txt").write_bytes(b"old template")
+
+            with (
+                mock.patch.object(apply_mod, "fetch_tree", return_value=["drift.txt"]),
+                mock.patch.object(apply_mod, "fetch_file", return_value=b"new template"),
+                mock.patch.object(
+                    apply_mod, "behind_template_ref", return_value="def5678"
+                ) as behind,
+            ):
+                result = apply_mod.apply_files(target, "template/repo")
+
+            behind.assert_called_once_with("template/repo", "drift.txt", b"old template")
+            assert result.drifted[0].behind_ref == "def5678"
 
 
 class TestApplyMain:

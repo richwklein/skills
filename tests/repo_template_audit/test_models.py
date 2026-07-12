@@ -28,7 +28,27 @@ class TestModels:
         files = models.ApplyFilesResult()
         assert files.synced == []
         assert files.drifted == []
+        assert files.skipped_deleted == []
         assert files.fetch_errors == []
+
+    def test_missing_file_defaults(self, models) -> None:
+        m = models.MissingFile(path="file.txt", kind="exact_match")
+        assert m.provenance == "new_in_template"
+        assert m.evidence is None
+        deleted = models.MissingFile(
+            path="file.txt",
+            kind="exact_match",
+            provenance="deleted_locally",
+            evidence="abc1234 remove file",
+        )
+        assert deleted.provenance == "deleted_locally"
+        assert deleted.evidence == "abc1234 remove file"
+
+    def test_drifted_file_defaults(self, models) -> None:
+        d = models.DriftedFile(path="file.txt", diff="-a\n+b")
+        assert d.behind_ref is None
+        behind = models.DriftedFile(path="file.txt", diff="-a\n+b", behind_ref="def5678")
+        assert behind.behind_ref == "def5678"
 
     def test_setting_drift(self, models) -> None:
         d = models.SettingDrift(key="x", template_value=True, target_value=False)

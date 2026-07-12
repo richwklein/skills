@@ -11,11 +11,13 @@ from pathlib import Path
 from .audit import (
     PRESENCE_ONLY,
     AuditError,
+    behind_template_ref,
     diff_snippet,
     fetch_file,
     fetch_tree,
     gh_api,
     load_settings_checks,
+    missing_file_provenance,
     parse_args,
     resolve_nested,
     should_ignore,
@@ -26,6 +28,8 @@ from .models import (
     ApplyFilesResult,
     ApplyRulesetsResult,
     ApplySettingsResult,
+    DriftedFile,
+    MissingFile,
 )
 from .render import render_apply_report
 
@@ -205,14 +209,38 @@ def apply_rulesets(template_repo: str, target_repo: str) -> ApplyRulesetsResult:
 
 
 def apply_files(target: Path, template_repo: str) -> ApplyFilesResult:
-    """Sync missing exact_match files. Return structured result."""
+    """Sync missing exact_match files. Return structured result.
+
+    Files a local commit deleted are never restored automatically — they are
+    reported as skipped so the user can confirm each removal still stands.
+    """
     tree = fetch_tree(template_repo)
     synced: list[str] = []
-    drifted: list[tuple] = []
+    drifted: list[DriftedFile] = []
+    skipped_deleted: list[MissingFile] = []
     fetch_errors: list[str] = []
 
     for path in tree:
         if should_ignore(path) or path in PRESENCE_ONLY:
+            continue
+
+        local_path = target / path
+        if not local_path.is_file():
+            provenance, evidence = missing_file_provenance(target, path)
+            if provenance == "deleted_locally":
+                skipped_deleted.append(
+                    MissingFile(
+                        path=path, kind="exact_match", provenance=provenance, evidence=evidence
+                    )
+                )
+                continue
+            canonical = fetch_file(template_repo, path)
+            if canonical is None:
+                fetch_errors.append(path)
+                continue
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.write_bytes(canonical)
+            synced.append(path)
             continue
 
         canonical = fetch_file(template_repo, path)
@@ -220,15 +248,22 @@ def apply_files(target: Path, template_repo: str) -> ApplyFilesResult:
             fetch_errors.append(path)
             continue
 
-        local_path = target / path
-        if not local_path.is_file():
-            local_path.parent.mkdir(parents=True, exist_ok=True)
-            local_path.write_bytes(canonical)
-            synced.append(path)
-        elif local_path.read_bytes() != canonical:
-            drifted.append((path, diff_snippet(canonical, local_path.read_bytes(), path)))
+        local_bytes = local_path.read_bytes()
+        if local_bytes != canonical:
+            drifted.append(
+                DriftedFile(
+                    path=path,
+                    diff=diff_snippet(canonical, local_bytes, path),
+                    behind_ref=behind_template_ref(template_repo, path, local_bytes),
+                )
+            )
 
-    return ApplyFilesResult(synced=synced, drifted=drifted, fetch_errors=fetch_errors)
+    return ApplyFilesResult(
+        synced=synced,
+        drifted=drifted,
+        skipped_deleted=skipped_deleted,
+        fetch_errors=fetch_errors,
+    )
 
 
 # ---- Main -------------------------------------------------------------------
