@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/richwklein/skills/compare/v1.1.0...v1.2.0) (2026-07-12)
+
+
+### Features
+
+* **repo-template-audit:** favor adopting template changes over assuming removal ([#26](https://github.com/richwklein/skills/issues/26)) ([abbd1c8](https://github.com/richwklein/skills/commit/abbd1c831fdf70c78e818d7ec123572627fdc918))
+
 ## [1.1.0](https://github.com/richwklein/skills/compare/v1.0.1...v1.1.0) (2026-07-11)
 
 
