@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/richwklein/skills/compare/v1.2.0...v1.3.0) (2026-07-19)
+
+
+### Features
+
+* **repo-template-audit:** detect label drift against template repo ([#31](https://github.com/richwklein/skills/issues/31)) ([24569af](https://github.com/richwklein/skills/commit/24569af39c587e4a43bd0cdabcbb8f4edd599c38))
+* **repo-template-audit:** invoke scripts via PATH shims ([#28](https://github.com/richwklein/skills/issues/28)) ([7fc7cac](https://github.com/richwklein/skills/commit/7fc7cac3aa0dee2c62fef2111281f0fb0a663a10))
+
 ## [1.2.0](https://github.com/richwklein/skills/compare/v1.1.0...v1.2.0) (2026-07-12)
 
 
