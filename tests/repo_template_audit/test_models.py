@@ -61,6 +61,26 @@ class TestModels:
         assert d.name == "main"
         assert d.status == "missing"
 
+    def test_label_drift_defaults(self, models) -> None:
+        d = models.LabelDrift(name="bug", status="missing")
+        assert d.name == "bug"
+        assert d.status == "missing"
+        assert d.field is None
+        assert d.template_value is None
+        assert d.target_value is None
+
+    def test_label_drift_mismatch(self, models) -> None:
+        d = models.LabelDrift(
+            name="bug",
+            status="mismatch",
+            field="color",
+            template_value="#d73a4a",
+            target_value="#ff0000",
+        )
+        assert d.field == "color"
+        assert d.template_value == "#d73a4a"
+        assert d.target_value == "#ff0000"
+
     def test_apply_action(self, models) -> None:
         a = models.ApplyAction(success=True, description="done")
         assert a.success

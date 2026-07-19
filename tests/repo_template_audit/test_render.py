@@ -93,6 +93,43 @@ class TestRenderSettingsDrift:
         assert "### API errors" in output
         assert "endpoint failed" in output
 
+    def test_renders_label_missing_and_extra(self, render, models) -> None:
+        result = models.SettingsDriftResult(
+            sections={
+                "labels": [
+                    models.LabelDrift("bug", "missing"),
+                    models.LabelDrift("custom", "extra"),
+                ],
+            },
+        )
+        output = "\n".join(render.render_settings_drift(result))
+        assert "| label `bug` | present | **missing** |" in output
+        assert "| label `custom` | absent | present (extra) |" in output
+
+    def test_renders_label_color_mismatch(self, render, models) -> None:
+        result = models.SettingsDriftResult(
+            sections={
+                "labels": [
+                    models.LabelDrift(
+                        "bug",
+                        "mismatch",
+                        field="color",
+                        template_value="#d73a4a",
+                        target_value="#ff0000",
+                    ),
+                ],
+            },
+        )
+        output = "\n".join(render.render_settings_drift(result))
+        assert "| label `bug` (color) | `#d73a4a` | `#ff0000` |" in output
+
+    def test_renders_label_api_error(self, render, models) -> None:
+        result = models.SettingsDriftResult(
+            sections={"labels": [models.LabelDrift("labels", "api_error")]},
+        )
+        output = "\n".join(render.render_settings_drift(result))
+        assert "| labels | unknown | unknown (API error) |" in output
+
 
 class TestRenderApplyReport:
     def test_includes_fetch_errors_and_skipped(self, render, models) -> None:

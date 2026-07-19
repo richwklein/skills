@@ -6,6 +6,7 @@ from .models import (
     ApplySettingsResult,
     DriftedFile,
     FileDriftResult,
+    LabelDrift,
     MissingFile,
     RulesetDrift,
     SettingDrift,
@@ -122,6 +123,18 @@ def render_settings_drift(result: SettingsDriftResult) -> list[str]:
                         out.append(f"| ruleset `{item.name}` | absent | present (extra) |")
                     elif item.status == "api_error":
                         out.append("| rulesets | unknown | unknown (API error) |")
+                elif isinstance(item, LabelDrift):
+                    if item.status == "missing":
+                        out.append(f"| label `{item.name}` | present | **missing** |")
+                    elif item.status == "extra":
+                        out.append(f"| label `{item.name}` | absent | present (extra) |")
+                    elif item.status == "mismatch":
+                        out.append(
+                            f"| label `{item.name}` ({item.field}) "
+                            f"| `{item.template_value}` | `{item.target_value}` |"
+                        )
+                    elif item.status == "api_error":
+                        out.append("| labels | unknown | unknown (API error) |")
                 elif isinstance(item, SettingDrift):
                     out.append(
                         f"| {item.key} | `{format_value(item.template_value)}` "
