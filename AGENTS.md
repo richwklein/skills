@@ -26,7 +26,7 @@ Name branches with a hyphen-delimited type prefix that mirrors the Conventional 
 | `feat-`, `feature-`                                                                                 | `enhancement`   |
 | `fix-`, `bug-`, `bugfix-`                                                                           | `bug`           |
 | `docs-`, `doc-`                                                                                     | `documentation` |
-| `chore-`, `refactor-`, `test-`, `build-`, `ci-`, `perf-`, `style-`, `task-`, `maint-`, `maintenance-` | `task`          |
+| `chore-`, `refactor-`, `test-`, `build-`, `ci-`, `perf-`, `style-`, `task-`, `maint-`, `maintenance-` | `task`        |
 
 Example: `feature-add-search`, `fix-login-redirect`, `docs-readme-update`.
 
@@ -36,7 +36,7 @@ This repo ships four PR templates aligned with the issue templates: `bug.md`, `e
 
 Pick one by appending `?template=<name>.md` to the compare URL, for example:
 
-```text
+```
 https://github.com/<owner>/<repo>/compare/main...<branch>?template=enhancement.md
 ```
 

@@ -47,8 +47,19 @@ class RulesetDrift:
 
 
 @dataclass
+class LabelDrift:
+    name: str
+    status: str  # "missing" | "extra" | "mismatch" | "api_error"
+    field: str | None = None  # "color" or "description" (mismatch only)
+    template_value: str | None = None
+    target_value: str | None = None
+
+
+@dataclass
 class SettingsDriftResult:
-    sections: dict[str, list[SettingDrift | RulesetDrift]] = field(default_factory=dict)
+    sections: dict[str, list[SettingDrift | RulesetDrift | LabelDrift]] = field(
+        default_factory=dict
+    )
     api_errors: list[str] = field(default_factory=list)
 
 

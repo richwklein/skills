@@ -511,6 +511,82 @@ class TestCompareRulesets:
         assert drifts[0].status == "api_error"
 
 
+class TestCompareLabels:
+    def test_reports_missing_and_extra(self, audit) -> None:
+        responses = {
+            "repos/template/repo/labels": [
+                {"name": "bug", "color": "d73a4a", "description": "A bug"},
+                {"name": "enhancement", "color": "a2eeef", "description": ""},
+            ],
+            "repos/target/repo/labels": [
+                {"name": "bug", "color": "d73a4a", "description": "A bug"},
+                {"name": "custom", "color": "ffffff", "description": ""},
+            ],
+        }
+        with mock.patch.object(
+            audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+        ):
+            drifts = audit.compare_labels("template/repo", "target/repo")
+
+        assert any(d.name == "enhancement" and d.status == "missing" for d in drifts)
+        assert any(d.name == "custom" and d.status == "extra" for d in drifts)
+
+    def test_reports_color_mismatch(self, audit) -> None:
+        responses = {
+            "repos/template/repo/labels": [
+                {"name": "bug", "color": "d73a4a", "description": "A bug"},
+            ],
+            "repos/target/repo/labels": [
+                {"name": "bug", "color": "ff0000", "description": "A bug"},
+            ],
+        }
+        with mock.patch.object(
+            audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+        ):
+            drifts = audit.compare_labels("template/repo", "target/repo")
+
+        assert len(drifts) == 1
+        assert drifts[0].name == "bug"
+        assert drifts[0].status == "mismatch"
+        assert drifts[0].field == "color"
+        assert drifts[0].template_value == "d73a4a"
+        assert drifts[0].target_value == "ff0000"
+
+    def test_reports_description_mismatch(self, audit) -> None:
+        responses = {
+            "repos/template/repo/labels": [
+                {"name": "bug", "color": "d73a4a", "description": "A bug"},
+            ],
+            "repos/target/repo/labels": [
+                {"name": "bug", "color": "d73a4a", "description": "Something else"},
+            ],
+        }
+        with mock.patch.object(
+            audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+        ):
+            drifts = audit.compare_labels("template/repo", "target/repo")
+
+        assert len(drifts) == 1
+        assert drifts[0].field == "description"
+
+    def test_reports_no_drift(self, audit) -> None:
+        label = {"name": "bug", "color": "d73a4a", "description": "A bug"}
+        responses = {
+            "repos/template/repo/labels": [label],
+            "repos/target/repo/labels": [label],
+        }
+        with mock.patch.object(
+            audit, "gh_api", side_effect=lambda path, errors=None: responses[path]
+        ):
+            assert audit.compare_labels("template/repo", "target/repo") == []
+
+    def test_reports_api_error(self, audit) -> None:
+        with mock.patch.object(audit, "gh_api", return_value=None):
+            drifts = audit.compare_labels("template/repo", "target/repo")
+        assert len(drifts) == 1
+        assert drifts[0].status == "api_error"
+
+
 class TestAuditSettings:
     def test_reports_field_list_nested_and_ruleset_drift(self, audit) -> None:
         checks = {

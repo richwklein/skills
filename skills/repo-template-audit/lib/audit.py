@@ -18,6 +18,7 @@ from urllib.parse import quote
 from .models import (
     DriftedFile,
     FileDriftResult,
+    LabelDrift,
     MissingFile,
     RulesetDrift,
     SchemaGap,
@@ -385,6 +386,39 @@ def compare_rulesets(
     return drifts
 
 
+def compare_labels(
+    template_repo: str,
+    target_repo: str,
+    errors: list[str] | None = None,
+) -> list[LabelDrift]:
+    """Compare labels between template and target repos."""
+    template_labels = gh_api(f"repos/{template_repo}/labels", errors=errors)
+    target_labels = gh_api(f"repos/{target_repo}/labels", errors=errors)
+
+    if not isinstance(template_labels, list) or not isinstance(target_labels, list):
+        return [LabelDrift(name="labels", status="api_error")]
+
+    template_by_name = {lb["name"]: lb for lb in template_labels if isinstance(lb, dict)}
+    target_by_name = {lb["name"]: lb for lb in target_labels if isinstance(lb, dict)}
+
+    drifts: list[LabelDrift] = []
+    for name in sorted(set(template_by_name) - set(target_by_name)):
+        drifts.append(LabelDrift(name=name, status="missing"))
+    for name in sorted(set(target_by_name) - set(template_by_name)):
+        drifts.append(LabelDrift(name=name, status="extra"))
+    for name in sorted(set(template_by_name) & set(target_by_name)):
+        tl, tgt = template_by_name[name], target_by_name[name]
+        for f in ("color", "description"):
+            tv, tv2 = tl.get(f, ""), tgt.get(f, "")
+            if tv != tv2:
+                drifts.append(
+                    LabelDrift(
+                        name=name, status="mismatch", field=f, template_value=tv, target_value=tv2
+                    )
+                )
+    return drifts
+
+
 def audit_settings(template_repo: str, target_repo: str) -> SettingsDriftResult:
     """Compare GitHub settings between template and target repos."""
     checks = load_settings_checks()
@@ -398,6 +432,11 @@ def audit_settings(template_repo: str, target_repo: str) -> SettingsDriftResult:
 
         if endpoint.get("compare") == "rulesets":
             drifts = compare_rulesets(template_repo, target_repo, errors=api_errors)
+            sections.setdefault(section_name, []).extend(drifts)
+            continue
+
+        if endpoint.get("compare") == "labels":
+            drifts = compare_labels(template_repo, target_repo, errors=api_errors)
             sections.setdefault(section_name, []).extend(drifts)
             continue
 

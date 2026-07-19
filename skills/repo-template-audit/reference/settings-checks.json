@@ -65,6 +65,11 @@
       "path": "repos/{repo}/rulesets",
       "section": "rulesets",
       "compare": "rulesets"
+    },
+    {
+      "path": "repos/{repo}/labels",
+      "section": "labels",
+      "compare": "labels"
     }
   ]
 }
