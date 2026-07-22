@@ -8,7 +8,6 @@
     "package-lock.json",
     "astro.config.ts",
     "vitest.setup.ts",
-    "release-please-config.json",
     ".release-please-manifest.json"
   ],
   "schema_checks": [
