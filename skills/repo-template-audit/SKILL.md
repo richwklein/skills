@@ -90,7 +90,7 @@ The script emits these finding types:
 - **Missing files**: present in the template but absent locally. The script classifies each by the target's git history:
   - **New in template** — no local commit ever deleted it; the file landed in the template after this repo was generated. This is template evolution the repo hasn't picked up. Default action: adopt it.
   - **Deleted locally** — a local commit removed it; the report cites the deleting commit. Confirm the removal still stands before restoring.
-- **Drifted files**: present locally but differ from the template. Diffs read **local → template** — the patch a sync would apply: `+` lines are template content the repo hasn't picked up; `-` lines are local content a sync would remove. Files marked **behind template** are unmodified older template versions — the template simply moved forward, and syncing is a safe fast-forward. Inspect each diff individually — do NOT batch-dismiss them as intentional.
+- **Drifted files**: present locally but differ from the template. Diffs read **local → template** — the patch a sync would apply: `+` lines are template content the repo hasn't picked up; `-` lines are local content a sync would remove. Files marked **behind template** are unmodified older template versions — the template simply moved forward, and syncing is a safe fast-forward. Inspect each diff individually — do NOT batch-dismiss them as intentional. `release-please-config.json` is content-compared and will always show a diff because identity fields like `package-name` differ per repo; read it field-by-field per the [classification heuristics](#per-file-drift-classification) so template policy changes (e.g. `changelog-sections`) aren't lost in the noise.
 - **Schema gaps**: required fields or scripts missing (e.g., package.json scripts).
 - **Settings drift**: GitHub repo settings differ between the template and the target. Shown as a table with field, template value, and target value.
 
@@ -102,15 +102,17 @@ For every drifted file, classify it into one of three groups — **Sync recommen
 
 2. **Workflow / CI files** (`.github/workflows/*.yaml`, `.github/actions/**`) — always classify as **Flagged**, even when marked behind-template or additions-only. These files control security-sensitive pipelines (scanning, permissions, release). Mention the behind-template evidence when presenting, but still show the diff and get confirmation.
 
-3. **Behind template** (marked by the script) — classify as **Sync recommended**. The local file is an unmodified older template version; syncing is a fast-forward that loses nothing local.
+3. **`release-please-config.json`** — always classify as **Flagged**, and read the diff field-by-field rather than as a whole. Some fields legitimately differ per repo and must NOT be flagged: `package-name`, `include-component-in-tag`, and any other component/tag-identity fields. Other fields are template policy that should track the template — flag any difference in `changelog-sections`, `release-type`, `changelog-path`, `bump-minor-pre-major`, `include-v-in-tag`, `draft`, or `prerelease`. When presenting, show the full diff but frame the recommendation around the policy fields only (e.g. _"template adds a `changelog-sections` block; `package-name` differs as expected — recommend adopting `changelog-sections`"_). Never dismiss the whole file just because an identity field like `package-name` differs.
 
-4. **Diffs with only `+` lines** — classify as **Sync recommended**. The template gained content this repo hasn't picked up, and there is no local-only content a sync would remove.
+4. **Behind template** (marked by the script) — classify as **Sync recommended**. The local file is an unmodified older template version; syncing is a fast-forward that loses nothing local.
 
-5. **Diffs with only `-` lines** in non-sensitive files — classify as **Informational**. These are local extensions the template doesn't have (e.g., a language-specific section in `.gitignore`, an extra IDE extension); the default is to keep them.
+5. **Diffs with only `+` lines** — classify as **Sync recommended**. The template gained content this repo hasn't picked up, and there is no local-only content a sync would remove.
 
-6. **Mixed diffs** (both `+` and `-` lines) — classify as **Flagged**. Both sides changed: syncing wholesale would drop local content, keeping local misses template updates. The user must decide per file; a manual merge may be needed.
+6. **Diffs with only `-` lines** in non-sensitive files — classify as **Informational**. These are local extensions the template doesn't have (e.g., a language-specific section in `.gitignore`, an extra IDE extension); the default is to keep them.
 
-7. **Cosmetic-only diffs** (e.g., quote style `'` vs `"`, trailing whitespace) — classify as **Informational** and note as low-risk.
+7. **Mixed diffs** (both `+` and `-` lines) — classify as **Flagged**. Both sides changed: syncing wholesale would drop local content, keeping local misses template updates. The user must decide per file; a manual merge may be needed.
+
+8. **Cosmetic-only diffs** (e.g., quote style `'` vs `"`, trailing whitespace) — classify as **Informational** and note as low-risk.
 
 ### Section-by-section flow
 

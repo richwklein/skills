@@ -246,6 +246,14 @@ class TestFileConfig:
         ref_path = root_dir / "skills" / "repo-template-audit" / "reference" / "file-checks.json"
         assert ref_path.is_file(), f"Expected config at {ref_path}"
 
+    def test_release_please_config_is_content_compared(self, audit) -> None:
+        # release-please-config.json carries template policy (e.g. changelog-sections)
+        # that must be diffed, so it must NOT be presence-only. The manifest is pure
+        # per-repo state (version) and stays presence-only to avoid perpetual drift.
+        presence_only = audit.get_file_config().presence_only
+        assert "release-please-config.json" not in presence_only
+        assert ".release-please-manifest.json" in presence_only
+
     def test_file_config_from_dict(self, audit) -> None:
         data = {
             "ignore": [".git"],
