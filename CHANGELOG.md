@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/richwklein/skills/compare/v1.3.0...v1.4.0) (2026-07-31)
+
+
+### Features
+
+* **repo-template-audit:** content-compare release-please-config.json ([#32](https://github.com/richwklein/skills/issues/32)) ([210691a](https://github.com/richwklein/skills/commit/210691ad35a01df0d719b63c6e676412251a571c))
+
+
+### Miscellaneous Chores
+
+* **audit:** sync files with template ([#37](https://github.com/richwklein/skills/issues/37)) ([aede6f2](https://github.com/richwklein/skills/commit/aede6f2e11631fd37a412f0fa82a901d9d0e2b29))
+
 ## [1.3.0](https://github.com/richwklein/skills/compare/v1.2.0...v1.3.0) (2026-07-19)
 
 
