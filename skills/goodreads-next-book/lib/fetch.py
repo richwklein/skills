@@ -2,8 +2,8 @@
 
 The feed caps at 100 items per response and ignores ``order``/``per-page`` tricks,
 but honors a ``page`` parameter. Paginating ``page=1..N`` and deduplicating by
-``book_id`` recovers the entire shelf (verified: 3 pages -> all 298 Want-to-Read
-books for account 63083737). Pagination stops on the first empty page.
+``book_id`` recovers the entire shelf (verified against a live account: 3 pages ->
+all ~300 Want-to-Read books). Pagination stops on the first empty page.
 
 The shelf source is either a bare numeric user id or a full RSS URL. A full URL may
 carry a private ``key=…`` query param; it is preserved but never logged.

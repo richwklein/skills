@@ -31,7 +31,7 @@ handles the semantic reasoning and any enrichment.
 next-book [SOURCE] [filters…]
 ```
 
-- `SOURCE` is the user's Goodreads **numeric user id** (e.g. `63083737`) or a full RSS
+- `SOURCE` is the user's Goodreads **numeric user id** (e.g. `12345678`) or a full RSS
   URL. If omitted, the script reads `GOODREADS_TO_READ_RSS_URL`. If neither is set it
   exits with a clear error — ask the user for their id.
 - A full URL may contain a private `key=…`. **Treat the URL and any key as a secret:**
@@ -57,7 +57,7 @@ Run via PATH if installed, else fall back to `python3 <skill-dir>/next-book`, wh
 | machine-readable output | `--json` (for programmatic enrichment) |
 
 Example — "highest-rated sci-fi I've been ignoring for years":
-`next-book 63083737 --genre sci-fi --unrated --min-rating 4.2 --prefer neglected`
+`next-book 12345678 --genre sci-fi --unrated --min-rating 4.2 --prefer neglected`
 
 ## Retrieval
 

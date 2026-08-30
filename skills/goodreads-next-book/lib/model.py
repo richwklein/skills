@@ -20,8 +20,8 @@ def normalize_tag(value: str) -> str:
     return value.strip().lower().replace(" ", "-").replace("_", "-")
 
 
-# Flat ``<item>`` child tags observed in the live feed (verified against account
-# 63083737). ``num_pages`` is intentionally absent here — it is nested under ``book``.
+# Flat ``<item>`` child tags observed in the live feed (verified against a real
+# account). ``num_pages`` is intentionally absent here — it is nested under ``book``.
 RAW_TAGS = (
     "guid",
     "pubDate",

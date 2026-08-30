@@ -12,8 +12,8 @@ def _opener(sample: bytes):
 
 class TestBuildPageUrl:
     def test_numeric_id(self, fetch) -> None:
-        url = fetch.build_page_url("63083737", 1)
-        assert "review/list_rss/63083737" in url
+        url = fetch.build_page_url("12345678", 1)
+        assert "review/list_rss/12345678" in url
         assert "page=1" in url
         assert "per_page=100" in url
         assert "shelf=to-read" in url
