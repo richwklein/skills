@@ -15,7 +15,7 @@ Audits a target repo against a template repo on GitHub.
 
 ## Invocation
 
-```
+```text
 /repo-template-audit [--apply] [owner/repo]
 ```
 

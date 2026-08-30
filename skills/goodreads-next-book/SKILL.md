@@ -27,7 +27,7 @@ handles the semantic reasoning and any enrichment.
 
 ## Invocation
 
-```
+```text
 next-book [SOURCE] [filters…]
 ```
 

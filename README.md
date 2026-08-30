@@ -14,7 +14,7 @@ npx skills add richwklein/skills
 
 Compares a local repo against a GitHub template repo to surface file drift and GitHub settings drift.
 
-```
+```text
 /repo-template-audit <owner/repo>
 ```
 
@@ -24,7 +24,7 @@ Pass the template repo to compare against (e.g., `richwklein/repo-template-base`
 
 Resizes and optimizes a source image to meet a repository's documented image rules (width, size limit, format), or validates an existing image directory against those rules.
 
-```
+```text
 /prepare-image <source> <output-name> [--width N] [--max-kb N] [--dir path] [--format jpeg|keep]
 /prepare-image --check [--dir path] [--width N] [--max-kb N] [--width-mode exact|at-least]
 ```
@@ -35,7 +35,7 @@ The skill reads the host repository's `README.md` and `AGENTS.md` to discover im
 
 Recommends your next read from your Goodreads **Want to Read** shelf, applying request-time filters (genre, author, rating, page count, publication year, shelf age, format) and preferring long-neglected books unless none reasonably match.
 
-```
+```text
 next-book [user-id | RSS URL] [--genre NAME] [--format digital|physical|audio] [--min-rating R] [--max-pages N] [--prefer neglected|recent]
 ```
 

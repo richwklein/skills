@@ -1,0 +1,17 @@
+{
+  // Shared by markdownlint-cli2 (the CLI) and the DavidAnson.vscode-markdownlint
+  // extension, so the editor and `make lint` agree.
+  "config": {
+    "default": true,
+    // Line length: prose here is written in long lines and SKILL.md tables run wide.
+    "MD013": false,
+    // Allow the same heading text under different parents (e.g. section templates).
+    "MD024": { "siblings_only": true },
+    // First line need not be an H1: PR templates open at H2 and CLAUDE.md is an @import.
+    "MD041": false,
+    // Table column style: SKILL.md tables use the compact (no outer padding) style.
+    "MD060": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules", "CHANGELOG.md"]
+}
