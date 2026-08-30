@@ -20,6 +20,7 @@ from .fetch import Opener, fetch_shelf
 from .model import NormalizedBook
 from .render import render
 
+_ENV_USER_ID = "GOODREADS_USER_ID"
 _ENV_SOURCE = "GOODREADS_TO_READ_RSS_URL"
 _REFERENCE = Path(__file__).resolve().parent.parent / "reference"
 _VOCAB_PATH = _REFERENCE / "shelf-vocabulary.json"
@@ -58,7 +59,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "source",
         nargs="?",
-        help=f"Goodreads numeric user id or full RSS URL. Falls back to ${_ENV_SOURCE}.",
+        help=(
+            f"Goodreads numeric user id or full RSS URL. Falls back to ${_ENV_USER_ID}, "
+            f"then ${_ENV_SOURCE}."
+        ),
     )
     p.add_argument("--shelf", default="to-read", help="Shelf name (default: to-read).")
     p.add_argument(
@@ -155,10 +159,13 @@ def _to_json(selection: Selection) -> str:
 
 
 def run(args: argparse.Namespace, now: datetime, opener: Opener | None = None) -> Selection:
-    source = args.source or os.environ.get(_ENV_SOURCE)
+    # Resolution order: explicit arg, then the non-sensitive user id, then the full RSS
+    # URL (which may embed a private ``key=`` for a private shelf).
+    source = args.source or os.environ.get(_ENV_USER_ID) or os.environ.get(_ENV_SOURCE)
     if not source:
         raise ValueError(
-            f"No shelf source. Pass a Goodreads user id or RSS URL, or set ${_ENV_SOURCE}."
+            "No shelf source. Pass a Goodreads user id or RSS URL, "
+            f"or set ${_ENV_USER_ID} (user id) or ${_ENV_SOURCE} (full URL)."
         )
     kwargs = {"opener": opener} if opener is not None else {}
     items = fetch_shelf(source, shelf=args.shelf, per_page=args.per_page, **kwargs)

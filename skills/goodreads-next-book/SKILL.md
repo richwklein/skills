@@ -32,10 +32,17 @@ next-book [SOURCE] [filters…]
 ```
 
 - `SOURCE` is the user's Goodreads **numeric user id** (e.g. `12345678`) or a full RSS
-  URL. If omitted, the script reads `GOODREADS_TO_READ_RSS_URL`. If neither is set it
-  exits with a clear error — ask the user for their id.
-- A full URL may contain a private `key=…`. **Treat the URL and any key as a secret:**
-  never echo it back, commit it, or place it in output. The script never prints it.
+  URL. If omitted, the script resolves the source in this order: `GOODREADS_USER_ID`
+  (a bare id — the common case, not sensitive), then `GOODREADS_TO_READ_RSS_URL` (a full
+  URL). If none is set it exits with a clear error — ask the user for their id.
+- A full URL may contain a private `key=…` (needed only for a **private** shelf).
+  **Treat the URL and any key as a secret:** never echo it back, commit it, or place it
+  in output. The script never prints it. A bare user id is not sensitive.
+
+The environment variables let a user configure their id once (e.g. in a shell profile or
+a `~/.env` sourced by `~/.zprofile`) rather than passing it each run. The skill only reads
+the variables from the environment; loading a `.env` file is the shell's job, not the
+script's.
 
 Run via PATH if installed, else fall back to `python3 <skill-dir>/next-book`, where
 `<skill-dir>` is the directory containing this SKILL.md.

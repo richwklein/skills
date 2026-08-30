@@ -26,6 +26,41 @@ class TestLoadVocab:
         assert capsys.readouterr().err == ""
 
 
+class TestSourceResolution:
+    def _run_capturing_source(self, cli, monkeypatch, argv):
+        seen: dict[str, str] = {}
+
+        def fake_fetch(source, **_kwargs):
+            seen["source"] = source
+            return []  # empty shelf -> select() short-circuits to an empty result
+
+        monkeypatch.setattr(cli, "fetch_shelf", fake_fetch)
+        cli.main(argv)
+        return seen.get("source")
+
+    def test_arg_beats_both_env_vars(self, cli, monkeypatch) -> None:
+        monkeypatch.setenv("GOODREADS_USER_ID", "222")
+        monkeypatch.setenv("GOODREADS_TO_READ_RSS_URL", "https://example.com/list_rss/3")
+        assert self._run_capturing_source(cli, monkeypatch, ["111"]) == "111"
+
+    def test_user_id_env_beats_url_env(self, cli, monkeypatch) -> None:
+        monkeypatch.delenv("GOODREADS_USER_ID", raising=False)
+        monkeypatch.setenv("GOODREADS_USER_ID", "222")
+        monkeypatch.setenv("GOODREADS_TO_READ_RSS_URL", "https://example.com/list_rss/3")
+        assert self._run_capturing_source(cli, monkeypatch, []) == "222"
+
+    def test_url_env_used_when_no_id(self, cli, monkeypatch) -> None:
+        monkeypatch.delenv("GOODREADS_USER_ID", raising=False)
+        monkeypatch.setenv("GOODREADS_TO_READ_RSS_URL", "https://example.com/list_rss/3")
+        assert self._run_capturing_source(cli, monkeypatch, []) == "https://example.com/list_rss/3"
+
+    def test_no_source_is_clean_error(self, cli, monkeypatch, capsys) -> None:
+        monkeypatch.delenv("GOODREADS_USER_ID", raising=False)
+        monkeypatch.delenv("GOODREADS_TO_READ_RSS_URL", raising=False)
+        assert cli.main([]) == 2
+        assert "No shelf source" in capsys.readouterr().err
+
+
 class TestNetworkErrorHandling:
     def test_timeout_is_caught_as_clean_error(self, cli, monkeypatch, capsys) -> None:
         def boom(*_args, **_kwargs):
