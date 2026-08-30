@@ -1,0 +1,14 @@
+{
+  "science-fiction": ["sci-fi", "scifi", "sf", "science fiction", "space-opera"],
+  "fantasy": ["high-fantasy", "epic-fantasy", "sword-and-sorcery", "litrpg"],
+  "young-adult": ["ya", "young adult", "teen"],
+  "computer-science": ["cs", "comp-sci", "programming", "software", "software-engineering"],
+  "self-help": ["self help", "selfhelp", "personal-development", "productivity"],
+  "mystery": ["thriller", "crime", "detective", "whodunit"],
+  "horror": ["scary", "gothic"],
+  "short-stories": ["short-story", "short stories", "anthology"],
+  "classic": ["classics", "classic-literature"],
+  "humor": ["humour", "comedy", "funny"],
+  "leadership": ["management"],
+  "science": ["popular-science", "pop-science"]
+}
