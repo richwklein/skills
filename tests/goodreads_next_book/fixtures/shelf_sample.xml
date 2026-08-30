@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample's bookshelf: to-read</title>
+    <item>
+      <guid>https://www.goodreads.com/review/show/101</guid>
+      <pubDate>Mon, 14 Jan 2019 08:00:00 -0800</pubDate>
+      <title>A Short SF</title>
+      <link>https://www.goodreads.com/book/show/101</link>
+      <book_id>101</book_id>
+      <book_image_url>https://img/101.jpg</book_image_url>
+      <book_description>A compact science fiction novel.</book_description>
+      <book id="101">
+        <num_pages>250</num_pages>
+      </book>
+      <author_name>Ada Author</author_name>
+      <isbn>1111111111</isbn>
+      <user_name>Sample</user_name>
+      <user_rating>0</user_rating>
+      <user_read_at></user_read_at>
+      <user_date_added>Mon, 14 Jan 2019 08:00:00 -0800</user_date_added>
+      <user_date_created>Mon, 14 Jan 2019 08:00:00 -0800</user_date_created>
+      <user_shelves>to-read, science-fiction</user_shelves>
+      <user_review></user_review>
+      <average_rating>4.50</average_rating>
+      <book_published>2001</book_published>
+    </item>
+    <item>
+      <guid>https://www.goodreads.com/review/show/202</guid>
+      <pubDate>Fri, 07 Aug 2026 08:14:19 -0700</pubDate>
+      <title>Big Fantasy</title>
+      <link>https://www.goodreads.com/book/show/202</link>
+      <book_id>202</book_id>
+      <book_image_url>https://img/202.jpg</book_image_url>
+      <book_description>A doorstopper epic fantasy.</book_description>
+      <book id="202">
+        <num_pages>900</num_pages>
+      </book>
+      <author_name>Bram Author</author_name>
+      <isbn>2222222222</isbn>
+      <user_name>Sample</user_name>
+      <user_rating>5</user_rating>
+      <user_read_at></user_read_at>
+      <user_date_added>Fri, 07 Aug 2026 08:14:19 -0700</user_date_added>
+      <user_date_created>Fri, 07 Aug 2026 08:14:19 -0700</user_date_created>
+      <user_shelves>to-read, fantasy</user_shelves>
+      <user_review></user_review>
+      <average_rating>4.20</average_rating>
+      <book_published>2010</book_published>
+    </item>
+    <item>
+      <guid>https://www.goodreads.com/review/show/303</guid>
+      <pubDate>Sun, 01 Mar 2020 10:00:00 -0800</pubDate>
+      <title>YA Space</title>
+      <link>https://www.goodreads.com/book/show/303</link>
+      <book_id>303</book_id>
+      <book_image_url>https://img/303.jpg</book_image_url>
+      <book_description>Teens in space.</book_description>
+      <book id="303">
+        <num_pages>280</num_pages>
+      </book>
+      <author_name>Cara Author</author_name>
+      <isbn>3333333333</isbn>
+      <user_name>Sample</user_name>
+      <user_rating>0</user_rating>
+      <user_read_at></user_read_at>
+      <user_date_added>Sun, 01 Mar 2020 10:00:00 -0800</user_date_added>
+      <user_date_created>Sun, 01 Mar 2020 10:00:00 -0800</user_date_created>
+      <user_shelves>to-read, science-fiction, young-adult</user_shelves>
+      <user_review></user_review>
+      <average_rating>3.90</average_rating>
+      <book_published>2015</book_published>
+    </item>
+    <item>
+      <guid>https://www.goodreads.com/review/show/404</guid>
+      <pubDate>Sat, 05 May 2018 09:00:00 -0700</pubDate>
+      <title>Learn Code</title>
+      <link>https://www.goodreads.com/book/show/404</link>
+      <book_id>404</book_id>
+      <book_image_url>https://img/404.jpg</book_image_url>
+      <book_description>An introduction to programming.</book_description>
+      <book id="404">
+        <num_pages>0</num_pages>
+      </book>
+      <author_name>Dan Author</author_name>
+      <isbn>4444444444</isbn>
+      <user_name>Sample</user_name>
+      <user_rating>0</user_rating>
+      <user_read_at></user_read_at>
+      <user_date_added>Sat, 05 May 2018 09:00:00 -0700</user_date_added>
+      <user_date_created>Sat, 05 May 2018 09:00:00 -0700</user_date_created>
+      <user_shelves>to-read, computer-science</user_shelves>
+      <user_review></user_review>
+      <average_rating>4.00</average_rating>
+      <book_published>2012</book_published>
+    </item>
+    <item>
+      <guid>https://www.goodreads.com/review/show/505</guid>
+      <pubDate>Sat, 06 Jun 2015 09:00:00 -0700</pubDate>
+      <title>Old Mystery</title>
+      <link>https://www.goodreads.com/book/show/505</link>
+      <book_id>505</book_id>
+      <book_image_url>https://img/505.jpg</book_image_url>
+      <book_description>A cold case reopened.</book_description>
+      <book id="505">
+        <num_pages>320</num_pages>
+      </book>
+      <author_name>Eve Author</author_name>
+      <isbn>5555555555</isbn>
+      <user_name>Sample</user_name>
+      <user_rating>0</user_rating>
+      <user_read_at></user_read_at>
+      <user_date_added>Sat, 06 Jun 2015 09:00:00 -0700</user_date_added>
+      <user_date_created>Sat, 06 Jun 2015 09:00:00 -0700</user_date_created>
+      <user_shelves>to-read, mystery</user_shelves>
+      <user_review></user_review>
+      <average_rating>4.60</average_rating>
+      <book_published>1998</book_published>
+    </item>
+    <item>
+      <guid>https://www.goodreads.com/review/show/202b</guid>
+      <pubDate>Fri, 07 Aug 2026 08:14:19 -0700</pubDate>
+      <title>Big Fantasy</title>
+      <link>https://www.goodreads.com/book/show/202</link>
+      <book_id>202</book_id>
+      <book_image_url>https://img/202.jpg</book_image_url>
+      <book_description>Duplicate of the same book_id to exercise dedup.</book_description>
+      <book id="202">
+        <num_pages>900</num_pages>
+      </book>
+      <author_name>Bram Author</author_name>
+      <isbn>2222222222</isbn>
+      <user_name>Sample</user_name>
+      <user_rating>5</user_rating>
+      <user_read_at></user_read_at>
+      <user_date_added>Fri, 07 Aug 2026 08:14:19 -0700</user_date_added>
+      <user_date_created>Fri, 07 Aug 2026 08:14:19 -0700</user_date_created>
+      <user_shelves>to-read, fantasy</user_shelves>
+      <user_review></user_review>
+      <average_rating>4.20</average_rating>
+      <book_published>2010</book_published>
+    </item>
+    <item>
+      <guid>https://www.goodreads.com/review/show/707</guid>
+      <pubDate>Fri, 09 Sep 2022 09:00:00 -0700</pubDate>
+      <title>Classic Tale</title>
+      <link>https://www.goodreads.com/book/show/707</link>
+      <book_id>707</book_id>
+      <book_image_url>https://img/707.jpg</book_image_url>
+      <book_description>A short 19th-century classic.</book_description>
+      <book id="707">
+        <num_pages>150</num_pages>
+      </book>
+      <author_name>Finn Author</author_name>
+      <isbn></isbn>
+      <user_name>Sample</user_name>
+      <user_rating>0</user_rating>
+      <user_read_at></user_read_at>
+      <user_date_added>Fri, 09 Sep 2022 09:00:00 -0700</user_date_added>
+      <user_date_created>Fri, 09 Sep 2022 09:00:00 -0700</user_date_created>
+      <user_shelves>to-read, classic</user_shelves>
+      <user_review></user_review>
+      <average_rating>4.10</average_rating>
+      <book_published>1850</book_published>
+    </item>
+  </channel>
+</rss>

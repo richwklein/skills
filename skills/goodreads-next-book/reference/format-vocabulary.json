@@ -1,0 +1,7 @@
+{
+  "digital": ["ebook", "e-book", "kindle", "kindle-edition", "epub", "digital", "e-reader"],
+  "physical": ["print", "paperback", "hardcover", "hardback", "mass-market", "physical-copy"],
+  "audio": ["audiobook", "audio-book", "audible", "audio-cd"],
+  "owned": ["own", "owned-books", "i-own-it", "purchased", "on-my-shelf"],
+  "library": ["borrowed", "libby", "overdrive", "hoopla", "library-loan"]
+}
