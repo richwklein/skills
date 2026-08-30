@@ -1,4 +1,4 @@
-"""Render a selection as well-formed Markdown for Claude to present.
+"""Render a selection as well-formed Markdown for the agent to present.
 
 The shelf source (which may embed a secret ``key=``) is never passed to this module,
 so it cannot leak into the report.

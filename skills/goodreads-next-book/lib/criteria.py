@@ -1,10 +1,10 @@
 """Deterministic hard-filtering and soft-scoring over normalized books.
 
-Claude translates a natural request ("light sci-fi under 300 pages I've been
+The agent translates a natural request ("light sci-fi under 300 pages I've been
 ignoring") into structured flags; this module never parses free text. It applies
 hard filters, scores survivors with shelf age as a first-class signal, and shapes a
 best / alternative / wildcard shortlist. Genuinely semantic criteria (tone, themes,
-series status) are left to Claude to resolve on the returned shortlist.
+series status) are left to the agent to resolve on the returned shortlist.
 """
 
 from __future__ import annotations

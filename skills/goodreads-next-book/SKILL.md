@@ -11,7 +11,7 @@ description: >
 # goodreads-next-book
 
 Recommends the user's next read from their Goodreads **Want to Read** shelf. A
-deterministic script handles retrieval, structured filtering, and scoring; Claude
+deterministic script handles retrieval, structured filtering, and scoring; the agent
 handles the semantic reasoning and any enrichment.
 
 ## Two-layer contract
@@ -20,7 +20,7 @@ handles the semantic reasoning and any enrichment.
    structured hard filters (genre, author, rating, page count, publication year, date
    added, unrated), scores survivors with **shelf age as a first-class signal**, and
    returns a best / alternative / wildcard shortlist.
-2. **You (Claude)** — translate the user's natural request into script flags, then
+2. **You (the agent)** — translate the user's natural request into script flags, then
    resolve genuinely semantic criteria (tone, "light vacation read", themes, series
    position, audiobook quality) on the **returned shortlist only**, enriching via Open
    Library (by ISBN, ~75% of books) then web search. Do not enrich the whole shelf.
@@ -120,4 +120,4 @@ digitally.
 
 ## Dependencies
 
-`python3` (standard library only). Enrichment steps use Claude's web/Open Library access.
+`python3` (standard library only). Enrichment steps use the agent's web/Open Library access.
