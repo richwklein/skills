@@ -19,8 +19,37 @@ _W_RATING = 0.5
 _W_AGE = 0.3
 _W_FIT = 0.2
 _AGE_SATURATION_YEARS = 5.0
+# Flat penalty for a book that comes later in a series than the reader has reached.
+# It exceeds the maximum reachable positive score (rating + age + fit <= 1.0), so an
+# out-of-order book always sorts below any in-order/standalone one without being
+# removed — a mis-tagged standalone or a thin shelf can still surface it.
+_SERIES_ORDER_PENALTY = 1.0
 
-__all__ = ["Criteria", "Selection", "all_vocab_tokens", "expand_genres", "normalize_tag", "select"]
+# Series progress: canonical series key -> the set of positions the reader has finished
+# (from the read shelf). Empty/omitted means "no read-shelf data" — every book is then
+# treated as in order, so the feature degrades cleanly when the check is skipped.
+SeriesProgress = dict[str, set[float]]
+
+__all__ = [
+    "Criteria",
+    "Selection",
+    "SeriesProgress",
+    "SeriesRedirect",
+    "all_vocab_tokens",
+    "build_series_progress",
+    "expand_genres",
+    "normalize_tag",
+    "select",
+]
+
+
+def build_series_progress(read_books: list[NormalizedBook]) -> SeriesProgress:
+    """Map each series the reader has touched to the set of positions they've finished."""
+    progress: SeriesProgress = {}
+    for book in read_books:
+        if book.series_key is not None and book.series_position is not None:
+            progress.setdefault(book.series_key, set()).add(book.series_position)
+    return progress
 
 
 def expand_genres(requested: list[str], vocab: dict[str, list[str]]) -> set[str]:
@@ -74,6 +103,20 @@ class Criteria:
 
 
 @dataclass
+class SeriesRedirect:
+    """One series the reader can't jump into yet, with the book to read instead.
+
+    ``read_max`` is the furthest position finished on the read shelf (``None`` if the
+    series hasn't been started). ``next_on_shelf`` is the earliest still-unread entry
+    sitting on the to-read shelf, or ``None`` when the earlier books aren't shelved.
+    """
+
+    series: str
+    read_max: float | None
+    next_on_shelf: NormalizedBook | None
+
+
+@dataclass
 class Selection:
     fetched_count: int
     filtered_count: int
@@ -84,6 +127,33 @@ class Selection:
     # format facet — the feed cannot answer digital-vs-physical, so they are surfaced
     # for Open Library enrichment rather than silently dropped.
     unknown_formats: list[NormalizedBook] = field(default_factory=list)
+    # Series-order awareness (populated only when read-shelf progress is supplied):
+    # ids of shortlisted books that come later in a series than the reader has reached,
+    # and, per affected series, where to pick the series back up.
+    series_out_of_order: set[str] = field(default_factory=set)
+    series_redirects: list[SeriesRedirect] = field(default_factory=list)
+
+
+def _read_max(book: NormalizedBook, progress: SeriesProgress) -> float | None:
+    """Furthest finished position in this book's series, or ``None`` if untouched."""
+    if book.series_key is None:
+        return None
+    positions = progress.get(book.series_key)
+    return max(positions) if positions else None
+
+
+def _is_out_of_order(book: NormalizedBook, progress: SeriesProgress) -> bool:
+    """True when earlier entries in the book's series are still unread.
+
+    A book at position ``p`` is in order once the reader has finished the entry just
+    before it (``read_max >= p - 1``), which also admits novellas like ``#2.5`` after
+    ``#2``. Openers and prequels (``p <= 1``) are always in order.
+    """
+    p = book.series_position
+    if book.series_key is None or p is None or p <= 1:
+        return False
+    read_max = _read_max(book, progress)
+    return read_max is None or read_max < p - 1
 
 
 def _book_tokens(book: NormalizedBook) -> frozenset[str]:
@@ -159,11 +229,19 @@ def _age_component(book: NormalizedBook, prefer: str, now: datetime) -> float:
     return saturated if prefer == "neglected" else 1.0 - saturated
 
 
-def score_book(book: NormalizedBook, criteria: Criteria, now: datetime) -> float:
+def score_book(
+    book: NormalizedBook,
+    criteria: Criteria,
+    now: datetime,
+    progress: SeriesProgress | None = None,
+) -> float:
     rating = (book.average_rating or 0.0) / 5.0
     age = _age_component(book, criteria.prefer, now)
     fit = 1.0 if criteria.genre_tokens and _genre_match(book, criteria.genre_tokens) else 0.0
-    return _W_RATING * rating + _W_AGE * age + _W_FIT * fit
+    score = _W_RATING * rating + _W_AGE * age + _W_FIT * fit
+    if progress is not None and _is_out_of_order(book, progress):
+        score -= _SERIES_ORDER_PENALTY
+    return score
 
 
 def _shape(scored: list[NormalizedBook], limit: int) -> list[NormalizedBook]:
@@ -188,7 +266,57 @@ def _shape(scored: list[NormalizedBook], limit: int) -> list[NormalizedBook]:
     return [*picks, wildcard]
 
 
-def select(books: list[NormalizedBook], criteria: Criteria, now: datetime) -> Selection:
+def _series_redirects(
+    books: list[NormalizedBook],
+    out_of_order: list[NormalizedBook],
+    progress: SeriesProgress,
+) -> list[SeriesRedirect]:
+    """One redirect per out-of-order series: where to resume it on the to-read shelf.
+
+    The target is the earliest still-unread entry that sits on the shelf after what the
+    reader has finished — which, when the shelf holds the very next book, is the correct
+    in-order pick rather than the demoted one.
+    """
+    by_series: dict[str, list[NormalizedBook]] = {}
+    for book in books:
+        if book.series_key is not None and book.series_position is not None:
+            by_series.setdefault(book.series_key, []).append(book)
+
+    redirects: list[SeriesRedirect] = []
+    seen: set[str] = set()
+    for book in out_of_order:
+        key = book.series_key
+        if key in seen:
+            continue
+        seen.add(key)
+        read_max = _read_max(book, progress)
+        pool = by_series.get(key, [])
+        if read_max is not None:
+            pool = [b for b in pool if b.series_position > read_max]
+        # A useful stepping stone is an in-order entry at a whole-series position (>= 1).
+        # Two exclusions: another out-of-order book (e.g. #2 when #1 isn't shelved) helps
+        # nobody, and a sub-1.0 prequel (#0.5) is typically written and shelved after the
+        # main run, so it isn't a real "start here" either. When neither exists, leave the
+        # redirect empty and let the section say the earlier books aren't on the shelf.
+        in_order = [
+            b for b in pool if b.series_position >= 1.0 and not _is_out_of_order(b, progress)
+        ]
+        next_on_shelf = min(in_order, key=lambda b: b.series_position) if in_order else None
+        redirects.append(
+            SeriesRedirect(series=book.series, read_max=read_max, next_on_shelf=next_on_shelf)
+        )
+    return redirects
+
+
+def select(
+    books: list[NormalizedBook],
+    criteria: Criteria,
+    now: datetime,
+    progress: SeriesProgress | None = None,
+) -> Selection:
+    # ``None`` means the series-order check is off (no read-shelf data): score, flag, and
+    # redirect all no-op. An empty dict means the read shelf WAS read and simply holds
+    # nothing for these series, so an unstarted series is genuinely out of order.
     filtered: list[NormalizedBook] = []
     unknown_pages: list[NormalizedBook] = []
     unknown_formats: list[NormalizedBook] = []
@@ -201,12 +329,25 @@ def select(books: list[NormalizedBook], criteria: Criteria, now: datetime) -> Se
         if passed:
             filtered.append(book)
 
-    scored = sorted(filtered, key=lambda b: score_book(b, criteria, now), reverse=True)
+    scored = sorted(filtered, key=lambda b: score_book(b, criteria, now, progress), reverse=True)
+    shortlist = _shape(scored, criteria.limit)
+    if progress is None:
+        return Selection(
+            fetched_count=len(books),
+            filtered_count=len(filtered),
+            shortlist=shortlist,
+            unknown_pages=unknown_pages,
+            criteria=criteria,
+            unknown_formats=unknown_formats,
+        )
+    out_of_order = [b for b in filtered if _is_out_of_order(b, progress)]
     return Selection(
         fetched_count=len(books),
         filtered_count=len(filtered),
-        shortlist=_shape(scored, criteria.limit),
+        shortlist=shortlist,
         unknown_pages=unknown_pages,
         criteria=criteria,
         unknown_formats=unknown_formats,
+        series_out_of_order={b.goodreads_id for b in shortlist if _is_out_of_order(b, progress)},
+        series_redirects=_series_redirects(books, out_of_order, progress),
     )

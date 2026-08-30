@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from pathlib import Path
 
 NOW = datetime(2026, 8, 29, tzinfo=UTC)
+
+
+def _item(title: str, book_id: str) -> ET.Element:
+    el = ET.Element("item")
+    ET.SubElement(el, "title").text = title
+    ET.SubElement(el, "book_id").text = book_id
+    ET.SubElement(el, "average_rating").text = "4.30"
+    return el
 
 
 class TestAddedBeforeInclusivity:
@@ -59,6 +68,53 @@ class TestSourceResolution:
         monkeypatch.delenv("GOODREADS_TO_READ_RSS_URL", raising=False)
         assert cli.main([]) == 2
         assert "No shelf source" in capsys.readouterr().err
+
+
+class TestSeriesCheckWiring:
+    def test_read_shelf_demotes_out_of_order(self, cli, monkeypatch) -> None:
+        to_read = [_item("Sword 3 (Swordheart, #3)", "301"), _item("Standalone", "900")]
+
+        def fake(source, shelf="to-read", **_kw):
+            return [] if shelf == "read" else to_read  # nothing read -> #3 out of order
+
+        monkeypatch.setattr(cli, "fetch_shelf", fake)
+        sel = cli.run(cli._build_parser().parse_args(["123"]), NOW)
+        assert sel.series_out_of_order == {"301"}
+        assert sel.shortlist[0].goodreads_id == "900"  # standalone leads the demoted #3
+
+    def test_read_shelf_marks_next_in_series_in_order(self, cli, monkeypatch) -> None:
+        def fake(source, shelf="to-read", **_kw):
+            if shelf == "read":
+                return [_item("Sword 1 (Swordheart, #1)", "100")]
+            return [_item("Sword 2 (Swordheart, #2)", "200")]
+
+        monkeypatch.setattr(cli, "fetch_shelf", fake)
+        sel = cli.run(cli._build_parser().parse_args(["123"]), NOW)
+        assert sel.series_out_of_order == set()  # #2 follows the read #1
+        assert sel.series_redirects == []
+
+    def test_no_series_check_skips_read_fetch(self, cli, monkeypatch) -> None:
+        shelves: list[str] = []
+
+        def fake(source, shelf="to-read", **_kw):
+            shelves.append(shelf)
+            return [_item("Sword 3 (Swordheart, #3)", "301")]
+
+        monkeypatch.setattr(cli, "fetch_shelf", fake)
+        sel = cli.run(cli._build_parser().parse_args(["123", "--no-series-check"]), NOW)
+        assert shelves == ["to-read"]  # the read shelf is never fetched
+        assert sel.series_out_of_order == set()
+
+    def test_read_shelf_error_degrades_without_crashing(self, cli, monkeypatch, capsys) -> None:
+        def fake(source, shelf="to-read", **_kw):
+            if shelf == "read":
+                raise TimeoutError("boom")
+            return [_item("Sword 3 (Swordheart, #3)", "301")]
+
+        monkeypatch.setattr(cli, "fetch_shelf", fake)
+        sel = cli.run(cli._build_parser().parse_args(["123"]), NOW)
+        assert "series-order check skipped" in capsys.readouterr().err
+        assert sel.series_out_of_order == set()  # recommendation still stands
 
 
 class TestNetworkErrorHandling:

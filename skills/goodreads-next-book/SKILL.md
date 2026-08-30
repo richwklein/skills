@@ -18,12 +18,17 @@ handles the semantic reasoning and any enrichment.
 
 1. **Deterministic script (`next-book`)** — fetches the full shelf over RSS, applies
    structured hard filters (genre, author, rating, page count, publication year, date
-   added, unrated), scores survivors with **shelf age as a first-class signal**, and
-   returns a best / alternative / wildcard shortlist.
+   added, unrated), scores survivors with **shelf age as a first-class signal**, cross-
+   references the **read** shelf so a book that comes later in a series than you've
+   reached is demoted (with a redirect to the right next entry), and returns a best /
+   alternative / wildcard shortlist.
 2. **You (the agent)** — translate the user's natural request into script flags, then
-   resolve genuinely semantic criteria (tone, "light vacation read", themes, series
-   position, audiobook quality) on the **returned shortlist only**, enriching via Open
-   Library (by ISBN, ~75% of books) then web search. Do not enrich the whole shelf.
+   resolve genuinely semantic criteria (tone, "light vacation read", themes, audiobook
+   quality) on the **returned shortlist only**, enriching via Open Library (by ISBN,
+   ~75% of books) then web search. Do not enrich the whole shelf. **Series order is
+   handled deterministically** (see below); your remaining job on series is only the
+   edge cases the title marker can't express — companions, sub-series naming, or a book
+   the user read outside Goodreads.
 
 ## Invocation
 
@@ -61,6 +66,8 @@ Run via PATH if installed, else fall back to `python3 <skill-dir>/next-book`, wh
 | "been ignoring" (unrated) | `--unrated` |
 | long-neglected vs fresh interest | `--prefer neglected` / `--prefer recent` |
 | how many to show | `--limit 3` (default) |
+| where series progress is read from | `--series-shelf read` (default) |
+| ignore series order entirely | `--no-series-check` |
 | machine-readable output | `--json` (for programmatic enrichment) |
 
 Example — "highest-rated sci-fi I've been ignoring for years":
@@ -72,13 +79,24 @@ The script paginates the shelf RSS endpoint (`page=1..N`, `per_page=100`) and
 deduplicates by `book_id`, recovering the entire shelf (the feed caps at 100 items per
 response and ignores `order`, so pagination is the only reliable full-shelf strategy).
 
+Unless `--no-series-check` is set, it then paginates the **read** shelf the same way to
+learn how far you've progressed in each series. If that shelf can't be read (network or
+parse error), the run continues with a warning and no series-order awareness rather than
+failing.
+
 ## Output
 
 Well-formed Markdown (or JSON with `--json`):
 
 - **Shortlist** — numbered candidates, each with average rating, page count, date
-  added, shelves, and Goodreads link. Roles: best match, strong alternative, wildcard.
+  added, shelves, series/position, and Goodreads link. Roles: best match, strong
+  alternative, wildcard. A shortlisted book that is out of series order is flagged
+  inline and points at the **Series order** section.
 - A coverage line (`Fetched N; matched M; showing K`).
+- **Series order** — only when the read-shelf check demoted a series entry. Lists each
+  affected series with how far you've read and the earliest still-unread entry on your
+  to-read shelf to pick it up from. Present this so the user can course-correct; don't
+  lead with a demoted book.
 - **Needs enrichment** — only when a page filter is set and a matching book has no page
   count in the feed. Look these up before excluding them.
 - **Needs enrichment (format/availability)** — only when `--format` is set and an
@@ -118,6 +136,12 @@ digitally.
   precise shelf-tenure claims.
 - Semantic criteria (tone, themes, "light read") are **not** in the feed — resolve them
   yourself on the shortlist.
+- **Series order** is read from the title's `(Series, #N)` marker and matched against the
+  read shelf by exact series name. It therefore misses cases the marker can't express: a
+  series with no `#N` (omnibus, some companions), a book read outside Goodreads, or the
+  same world split across differently-named sub-series (e.g. Percy Jackson's several
+  arcs). Treat the deterministic result as strong but not exhaustive; if a shortlisted
+  book smells like a mid-series or companion volume, confirm before recommending it.
 - **Format / availability** (digital vs physical) is **not** an edition field in the feed.
   `--format` filters on the user's own shelf tags (`kindle`, `ebook`, `owned`, `audiobook`,
   …) via `reference/format-vocabulary.json`, so it only decides books the user has tagged;

@@ -148,3 +148,109 @@ class TestScoringAndShape:
         assert sel.fetched_count == 6
         assert sel.filtered_count == 2
         assert len(sel.shortlist) == 1
+
+
+def _series_book(model, gid, series, pos, rating=4.30, added_year=2019):
+    title = f"Book {pos} ({series}, #{pos})"
+    return model.NormalizedBook(
+        goodreads_id=gid,
+        title=title,
+        author="Author",
+        isbn="",
+        pages=250,
+        published=2000,
+        description="",
+        average_rating=rating,
+        date_added=datetime(added_year, 1, 1, tzinfo=UTC),
+        my_rating=0,
+        shelves=["fantasy"],
+        cover_url="",
+        goodreads_url="u",
+        series=series,
+        series_position=float(pos),
+    )
+
+
+class TestSeriesProgress:
+    def test_builds_position_sets_per_series(self, criteria, model) -> None:
+        read = [
+            _series_book(model, "r1", "Swordheart", 1),
+            _series_book(model, "r2", "Swordheart", 2),
+        ]
+        progress = criteria.build_series_progress(read)
+        assert progress == {"swordheart": {1.0, 2.0}}
+
+    def test_ignores_standalones(self, criteria, model) -> None:
+        standalone = _mk(model, "s1", "The Body", ["horror"], 300, 4.1, 2019)
+        assert criteria.build_series_progress([standalone]) == {}
+
+
+class TestSeriesOrder:
+    def _ids(self, selection):
+        return [b.goodreads_id for b in selection.shortlist]
+
+    def test_out_of_order_demoted_below_standalone(self, criteria, model) -> None:
+        # A high-rated series #3 with nothing read must sort below a lower-rated standalone.
+        series3 = _series_book(model, "s3", "Swordheart", 3, rating=4.9)
+        standalone = _mk(model, "solo", "Standalone", ["fantasy"], 250, 4.0, 2019)
+        crit = criteria.Criteria(limit=10)
+        sel = criteria.select([series3, standalone], crit, NOW, progress={})
+        assert self._ids(sel) == ["solo", "s3"]  # demoted, but still reachable
+        assert sel.series_out_of_order == {"s3"}
+
+    def test_next_in_series_is_in_order(self, criteria, model) -> None:
+        # Read #1 -> #2 is the valid next read: not demoted, not flagged.
+        book2 = _series_book(model, "b2", "Swordheart", 2)
+        progress = criteria.build_series_progress([_series_book(model, "r1", "Swordheart", 1)])
+        sel = criteria.select([book2], criteria.Criteria(limit=10), NOW, progress=progress)
+        assert sel.series_out_of_order == set()
+        assert sel.series_redirects == []
+
+    def test_redirect_points_to_earliest_unread_on_shelf(self, criteria, model) -> None:
+        # Read up to #2; shelf holds #3 and #5. #5 is out of order and redirects to #3.
+        book3 = _series_book(model, "b3", "Dungeon Crawler Carl", 3)
+        book5 = _series_book(model, "b5", "Dungeon Crawler Carl", 5)
+        progress = criteria.build_series_progress(
+            [_series_book(model, "r2", "Dungeon Crawler Carl", 2)]
+        )
+        sel = criteria.select([book5, book3], criteria.Criteria(limit=10), NOW, progress=progress)
+        assert sel.series_out_of_order == {"b5"}  # #3 is in order, #5 is not
+        assert len(sel.series_redirects) == 1
+        redirect = sel.series_redirects[0]
+        assert redirect.series == "Dungeon Crawler Carl"
+        assert redirect.read_max == 2.0
+        assert redirect.next_on_shelf.goodreads_id == "b3"
+
+    def test_unstarted_series_has_no_read_max(self, criteria, model) -> None:
+        book2 = _series_book(model, "b2", "Curse Bearer", 2)
+        sel = criteria.select([book2], criteria.Criteria(limit=10), NOW, progress={})
+        assert len(sel.series_redirects) == 1
+        assert sel.series_redirects[0].read_max is None
+        # No earlier entry on the shelf -> nothing to redirect to.
+        assert sel.series_redirects[0].next_on_shelf is None
+
+    def test_sub_one_prequel_is_not_a_redirect_target(self, criteria, model) -> None:
+        # Nothing read; the shelf holds only a #0.5 prequel and an out-of-order #3.5.
+        # The prequel must not stand in as "start here" -> no redirect target.
+        prequel = _series_book(model, "p", "Mistborn", 0.5)
+        later = _series_book(model, "l", "Mistborn", 3.5)
+        sel = criteria.select([later, prequel], criteria.Criteria(limit=10), NOW, progress={})
+        assert len(sel.series_redirects) == 1
+        assert sel.series_redirects[0].next_on_shelf is None
+
+    def test_fractional_at_least_one_still_qualifies(self, criteria, model) -> None:
+        # A #2.5 novella after the read #2 is a legitimate next read, not a prequel.
+        novella = _series_book(model, "n", "Sworn Soldier", 2.5)
+        gap_book = _series_book(model, "g", "Sworn Soldier", 5)
+        progress = criteria.build_series_progress([_series_book(model, "r2", "Sworn Soldier", 2)])
+        sel = criteria.select(
+            [gap_book, novella], criteria.Criteria(limit=10), NOW, progress=progress
+        )
+        assert sel.series_redirects[0].next_on_shelf.goodreads_id == "n"
+
+    def test_no_progress_disables_check(self, criteria, model) -> None:
+        # progress=None (the --no-series-check path) never penalizes or flags.
+        series3 = _series_book(model, "s3", "Swordheart", 3, rating=4.9)
+        sel = criteria.select([series3], criteria.Criteria(limit=10), NOW, progress=None)
+        assert sel.series_out_of_order == set()
+        assert sel.series_redirects == []

@@ -8,6 +8,7 @@ The original parsed fields are retained on ``raw`` so no source data is lost.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -18,6 +19,38 @@ from xml.etree.ElementTree import Element
 def normalize_tag(value: str) -> str:
     """Canonical shelf/tag form: lowercased, spaces and underscores to hyphens."""
     return value.strip().lower().replace(" ", "-").replace("_", "-")
+
+
+# Goodreads appends the series and the book's place in it to the title as a trailing
+# parenthetical: ``Title (Series Name, #N)``. The comma is sometimes absent
+# (``(Curse Bearer #1)``) and the position may be fractional for novellas/prequels
+# (``(Mistborn, #3.5)``). ``[^()]`` keeps the match from crossing an unrelated paren.
+_SERIES_RE = re.compile(r"\s*\((?P<name>[^()]+?)\s*,?\s*#(?P<pos>\d+(?:\.\d+)?)\)\s*$")
+
+
+def parse_series(title: str) -> tuple[str | None, float | None]:
+    """Split a Goodreads title into its series name and numeric position.
+
+    Returns ``(None, None)`` for a standalone title or any trailing parenthetical
+    that carries no ``#N`` position (e.g. an omnibus ``(Series #1-3)``), leaving the
+    book to be treated as a standalone rather than mis-ordered.
+    """
+    match = _SERIES_RE.search(title)
+    if not match:
+        return None, None
+    name = match.group("name").strip()
+    if not name:
+        return None, None
+    return name, float(match.group("pos"))
+
+
+def series_key(name: str) -> str:
+    """Canonical series key for matching the same series across shelves.
+
+    Lowercased with runs of whitespace collapsed, so ``The Nico di Angelo Adventures``
+    on the to-read shelf keys the same as on the read shelf.
+    """
+    return " ".join(name.lower().split())
 
 
 # Flat ``<item>`` child tags observed in the live feed (verified against a real
@@ -104,6 +137,10 @@ class NormalizedBook:
     shelves: list[str]
     cover_url: str
     goodreads_url: str
+    # Series name and this book's position within it, parsed from the title's trailing
+    # ``(Series, #N)`` marker. ``None`` for standalones.
+    series: str | None = None
+    series_position: float | None = None
     raw: dict[str, str] = field(default_factory=dict, repr=False)
 
     @cached_property
@@ -111,10 +148,16 @@ class NormalizedBook:
         """Normalized shelf tokens, computed once — reused across filtering/scoring/shaping."""
         return frozenset(normalize_tag(shelf) for shelf in self.shelves)
 
+    @cached_property
+    def series_key(self) -> str | None:
+        """Canonical key for cross-shelf series matching, or ``None`` for a standalone."""
+        return series_key(self.series) if self.series else None
+
     @classmethod
     def from_item(cls, el: Element) -> NormalizedBook:
         raw = {tag: _text(el, tag) for tag in RAW_TAGS}
         pages = _int_or_none(_text(el, "book/num_pages"))
+        series, series_position = parse_series(raw["title"])
         return cls(
             goodreads_id=raw["book_id"],
             title=raw["title"],
@@ -129,6 +172,8 @@ class NormalizedBook:
             shelves=_shelves(raw["user_shelves"]),
             cover_url=raw["book_image_url"],
             goodreads_url=raw["link"],
+            series=series,
+            series_position=series_position,
             raw=raw,
         )
 
@@ -144,6 +189,8 @@ class NormalizedBook:
             "dateAdded": self.date_added.isoformat() if self.date_added else None,
             "myRating": self.my_rating,
             "shelves": self.shelves,
+            "series": self.series,
+            "seriesPosition": self.series_position,
             "coverUrl": self.cover_url,
             "goodreadsUrl": self.goodreads_url,
         }
