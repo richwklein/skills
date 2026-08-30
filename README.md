@@ -31,6 +31,16 @@ Resizes and optimizes a source image to meet a repository's documented image rul
 
 The skill reads the host repository's `README.md` and `AGENTS.md` to discover image constraints, confirms parameters with you before writing, and uses `sharp` (from the host repo's `node_modules`) to EXIF-rotate, resize, and compress images.
 
+### goodreads-next-book
+
+Recommends your next read from your Goodreads **Want to Read** shelf, applying request-time filters (genre, author, rating, page count, publication year, shelf age, format) and preferring long-neglected books unless none reasonably match.
+
+```
+next-book [user-id | RSS URL] [--genre NAME] [--format digital|physical|audio] [--min-rating R] [--max-pages N] [--prefer neglected|recent]
+```
+
+Ask naturally ("what should I read next", "pick a short sci-fi I've been ignoring") and the skill maps your request onto the deterministic `next-book` script, then enriches the shortlist via Open Library. Set `GOODREADS_USER_ID` (or `GOODREADS_TO_READ_RSS_URL` for a private shelf) so you don't pass your id each run.
+
 ## License
 
 [MIT](LICENSE) © Richard Klein
