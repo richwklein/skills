@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/richwklein/skills/compare/v1.5.0...v1.5.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* recommend Goodreads series books in reading order ([#43](https://github.com/richwklein/skills/issues/43)) ([661a0f3](https://github.com/richwklein/skills/commit/661a0f36f2e76974cd7a8abb9ad8ae5e8a5d5b17))
+
 ## [1.5.0](https://github.com/richwklein/skills/compare/v1.4.0...v1.5.0) (2026-08-30)
 
 
