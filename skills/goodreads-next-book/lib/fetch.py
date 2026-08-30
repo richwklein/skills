@@ -23,8 +23,18 @@ USER_AGENT = "Mozilla/5.0 (compatible; goodreads-next-book/1.0)"
 Opener = Callable[[str], bytes]
 
 
-def build_page_url(source: str, page: int, shelf: str = "to-read", per_page: int = 100) -> str:
-    """Compose the RSS URL for one page from a numeric id or a full URL."""
+def build_page_url(
+    source: str,
+    page: int,
+    shelf: str = "to-read",
+    per_page: int = 100,
+    force_shelf: bool = False,
+) -> str:
+    """Compose the RSS URL for one page from a numeric id or a full URL.
+
+    ``force_shelf`` overrides a ``shelf`` already pinned in a URL source, which the
+    read-shelf cross-reference needs so it never re-reads the to-read shelf by mistake.
+    """
     source = source.strip()
     if source.isdigit():
         query = urlencode({"shelf": shelf, "page": page, "per_page": per_page})
@@ -37,7 +47,10 @@ def build_page_url(source: str, page: int, shelf: str = "to-read", per_page: int
     if parts.scheme != "https":
         raise ValueError("source URL must use https")
     query = dict(parse_qsl(parts.query, keep_blank_values=True))
-    query.setdefault("shelf", shelf)
+    if force_shelf:
+        query["shelf"] = shelf
+    else:
+        query.setdefault("shelf", shelf)
     query.setdefault("per_page", str(per_page))
     query["page"] = str(page)  # always override; pagination is ours to drive
     return urlunparse(parts._replace(query=urlencode(query)))
@@ -55,15 +68,17 @@ def fetch_shelf(
     per_page: int = 100,
     max_pages: int = 20,
     opener: Opener = _open_url,
+    force_shelf: bool = False,
 ) -> list[Element]:
     """Return every unique ``<item>`` on the shelf, deduplicated by ``book_id``.
 
     ``opener`` is a seam so tests can serve fixtures without network access.
+    ``force_shelf`` overrides a shelf pinned in a URL source (see ``build_page_url``).
     """
     seen: dict[str, Element] = {}
     order: list[str] = []
     for page in range(1, max_pages + 1):
-        url = build_page_url(source, page, shelf, per_page)
+        url = build_page_url(source, page, shelf, per_page, force_shelf)
         root = ET.fromstring(opener(url))
         items = root.findall(".//item")
         if not items:

@@ -15,7 +15,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from xml.etree.ElementTree import ParseError
 
-from .criteria import Criteria, Selection, all_vocab_tokens, expand_genres, select
+from .criteria import (
+    Criteria,
+    Selection,
+    SeriesProgress,
+    all_vocab_tokens,
+    build_series_progress,
+    expand_genres,
+    select,
+)
 from .fetch import Opener, fetch_shelf
 from .model import NormalizedBook
 from .render import render
@@ -109,6 +117,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=3, metavar="K", help="How many to show (default 3)."
     )
     p.add_argument("--per-page", type=int, default=100, help="RSS page size (default 100).")
+    p.add_argument(
+        "--series-shelf",
+        default="read",
+        metavar="NAME",
+        help="Shelf to read series progress from for the order check (default: read).",
+    )
+    p.add_argument(
+        "--no-series-check",
+        action="store_true",
+        help="Skip the read-shelf fetch and the series-order demotion/redirects.",
+    )
     p.add_argument("--json", action="store_true", help="Emit JSON instead of Markdown.")
     return p
 
@@ -153,9 +172,44 @@ def _to_json(selection: Selection) -> str:
             "shortlist": [b.to_dict() for b in selection.shortlist],
             "needsEnrichment": [b.to_dict() for b in selection.unknown_pages],
             "needsFormatEnrichment": [b.to_dict() for b in selection.unknown_formats],
+            "seriesOutOfOrder": sorted(selection.series_out_of_order),
+            "seriesRedirects": [
+                {
+                    "series": r.series,
+                    "readMax": r.read_max,
+                    "nextOnShelf": r.next_on_shelf.to_dict() if r.next_on_shelf else None,
+                }
+                for r in selection.series_redirects
+            ],
         },
         indent=2,
     )
+
+
+def _fetch_progress(
+    source: str, args: argparse.Namespace, opener_kwargs: dict[str, Opener]
+) -> SeriesProgress | None:
+    """Read-shelf progress for the series-order check, or ``None`` if it can't be read.
+
+    A read-shelf failure must not sink the whole run — the to-read recommendation still
+    stands, just without series-order awareness — so network/parse errors degrade to a
+    warning. The source is never echoed (it may embed a secret ``key=``).
+    """
+    try:
+        items = fetch_shelf(
+            source,
+            shelf=args.series_shelf,
+            per_page=args.per_page,
+            force_shelf=True,
+            **opener_kwargs,
+        )
+    except (OSError, ParseError):
+        print(
+            f"warning: could not read the '{args.series_shelf}' shelf; series-order check skipped.",
+            file=sys.stderr,
+        )
+        return None
+    return build_series_progress([NormalizedBook.from_item(item) for item in items])
 
 
 def run(args: argparse.Namespace, now: datetime, opener: Opener | None = None) -> Selection:
@@ -167,11 +221,12 @@ def run(args: argparse.Namespace, now: datetime, opener: Opener | None = None) -
             "No shelf source. Pass a Goodreads user id or RSS URL, "
             f"or set ${_ENV_USER_ID} (user id) or ${_ENV_SOURCE} (full URL)."
         )
-    kwargs = {"opener": opener} if opener is not None else {}
+    kwargs: dict[str, Opener] = {"opener": opener} if opener is not None else {}
     items = fetch_shelf(source, shelf=args.shelf, per_page=args.per_page, **kwargs)
     books = [NormalizedBook.from_item(item) for item in items]
     criteria = _criteria_from_args(args, _load_vocab(), _load_vocab(_FORMAT_VOCAB_PATH), now)
-    return select(books, criteria, now)
+    progress = None if args.no_series_check else _fetch_progress(source, args, kwargs)
+    return select(books, criteria, now, progress)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -6,7 +6,7 @@ so it cannot leak into the report.
 
 from __future__ import annotations
 
-from .criteria import Selection
+from .criteria import Selection, SeriesRedirect
 from .model import NormalizedBook
 
 _ROLES = ("Best match", "Strong alternative", "Wildcard")
@@ -16,7 +16,14 @@ def _role(index: int) -> str:
     return _ROLES[index] if index < len(_ROLES) else f"Option {index + 1}"
 
 
-def _line(book: NormalizedBook) -> list[str]:
+def _fmt_pos(pos: float | None) -> str:
+    """Series position as ``#3`` (whole) or ``#3.5`` (novella), not ``#3.0``."""
+    if pos is None:
+        return "#?"
+    return f"#{int(pos)}" if pos == int(pos) else f"#{pos}"
+
+
+def _line(book: NormalizedBook, out_of_order: bool) -> list[str]:
     rating = f"{book.average_rating:.2f}" if book.average_rating is not None else "n/a"
     pages = f"{book.pages}p" if book.pages is not None else "pages unknown"
     added = book.date_added.date().isoformat() if book.date_added else "date unknown"
@@ -25,9 +32,29 @@ def _line(book: NormalizedBook) -> list[str]:
         f"- avg rating {rating} · {pages} · added {added}",
         f"- shelves: {shelves}",
     ]
+    if book.series:
+        parts.append(f"- series: {book.series} ({_fmt_pos(book.series_position)})")
+    if out_of_order:
+        parts.append("- ⚠ out of series order — see **Series order** below")
     if book.goodreads_url:
         parts.append(f"- {book.goodreads_url}")
     return parts
+
+
+def _redirect_line(redirect: SeriesRedirect) -> str:
+    nxt = redirect.next_on_shelf
+    if redirect.read_max is not None:
+        progress = f"you've read through {_fmt_pos(redirect.read_max)}"
+    else:
+        progress = "you haven't started this series"
+    if nxt is None:
+        return (
+            f"- **{redirect.series}** — {progress}; the next entries aren't on your to-read shelf."
+        )
+    return (
+        f"- **{redirect.series}** — {progress}; read **{nxt.title}** "
+        f"({_fmt_pos(nxt.series_position)}) next _(on your to-read shelf)_."
+    )
 
 
 def render(selection: Selection) -> str:
@@ -47,12 +74,25 @@ def render(selection: Selection) -> str:
         lines.append("")
         for i, book in enumerate(selection.shortlist):
             lines.append(f"### {i + 1}. {book.title} — {book.author}  _({_role(i)})_")
-            lines.extend(_line(book))
+            lines.extend(_line(book, book.goodreads_id in selection.series_out_of_order))
             lines.append("")
     else:
         lines.append(
             "_No shelf book matched. Consider relaxing a filter or looking beyond the shelf._"
         )
+        lines.append("")
+
+    if selection.series_redirects:
+        lines.append("## Series order")
+        lines.append("")
+        lines.append(
+            "These matched your request but come later in a series than your read shelf "
+            "shows you've reached, so they were pushed down the ranking. Start from the "
+            "book named instead:"
+        )
+        lines.append("")
+        for redirect in selection.series_redirects:
+            lines.append(_redirect_line(redirect))
         lines.append("")
 
     if selection.unknown_pages:

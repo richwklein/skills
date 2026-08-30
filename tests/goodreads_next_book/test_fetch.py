@@ -27,6 +27,20 @@ class TestBuildPageUrl:
         assert query["key"] == ["SECRET"]  # secret param preserved
         assert query["page"] == ["3"]  # our pagination overrides the source's page
 
+    def test_force_shelf_overrides_pinned_shelf(self, fetch) -> None:
+        from urllib.parse import parse_qs, urlparse
+
+        source = "https://www.goodreads.com/review/list_rss/9?key=SECRET&shelf=to-read"
+        # Without force, a shelf pinned in the URL wins; with force (the read-shelf
+        # cross-reference) it is overridden so we never re-read the to-read shelf.
+        pinned = parse_qs(urlparse(fetch.build_page_url(source, 1, shelf="read")).query)
+        forced = parse_qs(
+            urlparse(fetch.build_page_url(source, 1, shelf="read", force_shelf=True)).query
+        )
+        assert pinned["shelf"] == ["to-read"]
+        assert forced["shelf"] == ["read"]
+        assert forced["key"] == ["SECRET"]  # secret still preserved
+
     def test_non_https_source_rejected(self, fetch) -> None:
         import pytest
 
@@ -56,6 +70,28 @@ class TestFetchShelf:
 
     def test_empty_first_page_returns_nothing(self, fetch) -> None:
         assert fetch.fetch_shelf("123", opener=lambda url: EMPTY_FEED) == []
+
+
+class TestParseSeries:
+    def test_comma_marker(self, model) -> None:
+        assert model.parse_series("Daggerbound (Swordheart, #2)") == ("Swordheart", 2.0)
+
+    def test_missing_comma(self, model) -> None:
+        assert model.parse_series("When Among Crows (Curse Bearer #1)") == ("Curse Bearer", 1.0)
+
+    def test_fractional_position(self, model) -> None:
+        name, pos = model.parse_series("Mistborn: Secret History (Mistborn, #3.5)")
+        assert name == "Mistborn" and pos == 3.5
+
+    def test_standalone_has_no_series(self, model) -> None:
+        assert model.parse_series("The Body") == (None, None)
+
+    def test_parenthetical_without_position_is_not_a_series(self, model) -> None:
+        # An omnibus range carries no single position -> treat as a standalone, not #1.
+        assert model.parse_series("The Broken Earth (Omnibus #1-3)") == (None, None)
+
+    def test_series_key_collapses_case_and_whitespace(self, model) -> None:
+        assert model.series_key("The Nico di Angelo  Adventures") == "the nico di angelo adventures"
 
 
 class TestParseItem:
