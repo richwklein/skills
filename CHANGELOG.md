@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/richwklein/skills/compare/v1.4.0...v1.5.0) (2026-08-30)
+
+
+### Features
+
+* add goodreads-next-book skill ([#40](https://github.com/richwklein/skills/issues/40)) ([df39090](https://github.com/richwklein/skills/commit/df39090262f2822eab797278e05f66c13b26732b))
+
 ## [1.4.0](https://github.com/richwklein/skills/compare/v1.3.0...v1.4.0) (2026-07-31)
 
 
