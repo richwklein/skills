@@ -6,7 +6,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 Every skill MUST live in its own directory under `skills/`, containing a `SKILL.md` file.
 
-```
+```text
 skills/
 └── skill-name/
     ├── SKILL.md          # REQUIRED — skill metadata and instructions
