@@ -476,6 +476,14 @@ class TestCheckSchemas:
             )
             assert audit.check_schemas(target) == []
 
+    def test_skips_checks_for_files_absent_from_template(self, audit) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            (target / "package.json").write_text(json.dumps({"scripts": {"dev": "vite"}}))
+
+            assert audit.check_schemas(target, template_paths=["README.md"]) == []
+            assert audit.check_schemas(target, template_paths=["package.json"]) != []
+
 
 # ---- Settings drift ----------------------------------------------------------
 

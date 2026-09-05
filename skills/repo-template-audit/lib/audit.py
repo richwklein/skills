@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from difflib import unified_diff
 from pathlib import Path
@@ -292,7 +293,7 @@ def audit_files(
             )
         )
 
-    schema_gaps = check_schemas(target, config)
+    schema_gaps = check_schemas(target, config, template_paths=tree)
 
     return FileDriftResult(
         missing=missing,
@@ -302,12 +303,24 @@ def audit_files(
     )
 
 
-def check_schemas(target: Path, config: FileConfig | None = None) -> list[SchemaGap]:
-    """Run schema validations against local files."""
+def check_schemas(
+    target: Path,
+    config: FileConfig | None = None,
+    template_paths: Iterable[str] | None = None,
+) -> list[SchemaGap]:
+    """Run schema validations against local files.
+
+    A check applies only when the template itself ships the file being
+    validated; `template_paths` scopes the checks to that tree. Passing None
+    runs every configured check regardless of template.
+    """
     if config is None:
         config = get_file_config()
+    in_template = None if template_paths is None else set(template_paths)
     gaps: list[SchemaGap] = []
     for check in config.schema_checks:
+        if in_template is not None and check["path"] not in in_template:
+            continue
         pkg = target / check["path"]
         if not pkg.is_file():
             continue
