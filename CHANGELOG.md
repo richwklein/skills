@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/richwklein/skills/compare/v1.5.1...v1.5.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* **repo-template-audit:** scope schema checks to the template's file tree ([#46](https://github.com/richwklein/skills/issues/46)) ([0c764d7](https://github.com/richwklein/skills/commit/0c764d7b278f3c48aaafa7ec0bd29f1e4fab724f))
+
 ## [1.5.1](https://github.com/richwklein/skills/compare/v1.5.0...v1.5.1) (2026-08-30)
 
 
