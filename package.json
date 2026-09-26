@@ -4,6 +4,6 @@
   "private": true,
   "devDependencies": {
     "markdownlint-cli2": "^0.23.3",
-    "sharp": "^0.35.0"
+    "sharp": "^0.35.4"
   }
 }
