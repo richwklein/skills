@@ -4,7 +4,11 @@ version = "0.0.0"
 requires-python = ">=3.12"
 
 [project.optional-dependencies]
-dev = ["pytest>=9.0", "ruff>=0.9"]
+dev = ["pytest>=9.2.0", "ruff>=0.17.5"]
+
+[tool.setuptools]
+packages = []
+py-modules = []
 
 [tool.ruff]
 line-length = 100

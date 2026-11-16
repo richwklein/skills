@@ -19,6 +19,7 @@ coverage/
 
 # python
 __pycache__/
+*.egg-info/
 
 # env files
 .env
