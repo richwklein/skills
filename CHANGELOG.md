@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.3](https://github.com/richwklein/skills/compare/v1.5.2...v1.5.3) (2026-11-23)
+
+
+### Miscellaneous Chores
+
+* **deps:** refresh tooling and package discovery ([#56](https://github.com/richwklein/skills/issues/56)) ([983131d](https://github.com/richwklein/skills/commit/983131d66c8cb250ec09144d5e4efe37801bb26d))
+
 ## [1.5.2](https://github.com/richwklein/skills/compare/v1.5.1...v1.5.2) (2026-09-05)
 
 
